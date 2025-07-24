@@ -1,0 +1,65 @@
+version: '3.8'
+
+services:
+  # MySQL service
+  mysql:
+    image: mysql:8.0
+    container_name: my_university_mysql
+    restart: always
+    environment:
+      MYSQL_DATABASE: my_university
+      MYSQL_ROOT_PASSWORD: root
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-proot"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Cassandra service
+  cassandra:
+    image: cassandra:4.1
+    container_name: my_university_cassandra
+    ports:
+      - "9042:9042"  # CQL native transport port
+    environment:
+      - CASSANDRA_CLUSTER_NAME=my_university_cluster
+      - CASSANDRA_ENDPOINT_SNITCH=GossipingPropertyFileSnitch
+      - CASSANDRA_DC=datacenter1
+      - CASSANDRA_RACK=rack1
+      - CASSANDRA_START_RPC=true
+      - MAX_HEAP_SIZE=512M
+      - HEAP_NEWSIZE=128M
+    volumes:
+      - cassandra_data:/var/lib/cassandra
+    restart: always
+    healthcheck:
+      test: ["CMD", "cqlsh", "-e", "describe keyspaces"]
+      interval: 30s
+      timeout: 10s
+      retries: 10
+      start_period: 60s
+
+  # Cassandra Schema Initialization
+  cassandra-init:
+    image: cassandra:4.1
+    depends_on:
+      cassandra:
+        condition: service_healthy
+    volumes:
+      - ./init-scripts:/init-scripts
+    command: >
+      bash -c '
+        echo "Waiting for Cassandra to start..."
+        sleep 60
+        echo "Creating keyspace and tables..."
+        cqlsh cassandra -f /init-scripts/init-cassandra.cql
+      '
+    restart: on-failure
+
+volumes:
+  mysql_data:
+  cassandra_data: 
