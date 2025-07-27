@@ -12,8 +12,10 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Optional;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -26,6 +28,7 @@ public class RegistrationServiceImpl implements RegistrationService {
     private final SubjectRepository subjectRepository;
     private final StudentProfileRepository studentProfileRepository;
     private final TeacherProfileRepository teacherProfileRepository;
+    private final TeacherSubjectRepository teacherSubjectRepository;
     private final PasswordEncoder passwordEncoder;
 
     @Override
@@ -150,8 +153,14 @@ public class RegistrationServiceImpl implements RegistrationService {
             TeacherProfile savedTeacherProfile = teacherProfileRepository.save(teacherProfile);
             
             // Добавляем предметы преподавателю
-            // Note: В зависимости от вашей модели данных, это может потребовать отдельной логики
-            // teacherSubjectRepository.saveAll(...);
+            List<TeacherSubject> teacherSubjectList = teacherSubjects.stream()
+                    .map(subject -> TeacherSubject.builder()
+                            .teacher(savedTeacherProfile)
+                            .subject(subject)
+                            .build())
+                    .collect(Collectors.toList());
+            
+            teacherSubjectRepository.saveAll(teacherSubjectList);
         }
 
         // Для истории можно все равно сохранить запрос на регистрацию, но сразу с подтвержденным статусом

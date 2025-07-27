@@ -30,6 +30,9 @@ public class Subject {
     @OneToMany(mappedBy = "subject", cascade = CascadeType.ALL)
     private List<SubjectInDirection> subjectsInDirection;
 
+    @OneToMany(mappedBy = "subject", cascade = CascadeType.ALL)
+    private List<TeacherSubject> teacherSubjects;
+
     @PrePersist
     protected void onCreate() {
         createdAt = LocalDateTime.now();

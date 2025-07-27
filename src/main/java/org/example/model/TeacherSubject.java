@@ -4,39 +4,32 @@ import jakarta.persistence.*;
 import lombok.*;
 
 import java.time.LocalDateTime;
-import java.util.List;
 
 @Entity
-@Table(name = "teacher_profiles")
+@Table(name = "teacher_subjects")
 @Getter
 @Setter
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
-public class TeacherProfile {
+public class TeacherSubject {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Integer id;
 
-    @OneToOne
-    @JoinColumn(name = "user_id", nullable = false, unique = true)
-    private Users user;
+    @ManyToOne
+    @JoinColumn(name = "teacher_id", nullable = false)
+    private TeacherProfile teacher;
 
     @ManyToOne
-    @JoinColumn(name = "institute_id")
-    private Institute institute;
-
-    @Column
-    private String position;
+    @JoinColumn(name = "subject_id", nullable = false)
+    private Subject subject;
 
     @Column(name = "created_at")
     private LocalDateTime createdAt;
 
     @Column(name = "updated_at")
     private LocalDateTime updatedAt;
-
-    @OneToMany(mappedBy = "teacher", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
-    private List<TeacherSubject> teacherSubjects;
 
     @PrePersist
     protected void onCreate() {
