@@ -76,6 +76,14 @@ public class UniversityServiceImpl implements UniversityService {
                 .map(this::mapToSubjectDTO)
                 .collect(Collectors.toList());
     }
+    
+    @Override
+    @Transactional(readOnly = true)
+    public List<SubjectDTO> getSubjectsByUniversity(Integer universityId) {
+        return subjectRepository.findByUniversityId(universityId).stream()
+                .map(this::mapToSubjectDTO)
+                .collect(Collectors.toList());
+    }
 
     // Mapping methods
     private UniversityDTO mapToUniversityDTO(University university) {

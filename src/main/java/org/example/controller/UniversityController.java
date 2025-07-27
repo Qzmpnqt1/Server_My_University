@@ -60,4 +60,11 @@ public class UniversityController {
         List<SubjectDTO> subjects = universityService.searchSubjectsByName(query);
         return ResponseEntity.ok(ApiResponse.success(subjects));
     }
+    
+    @GetMapping("/{universityId}/subjects")
+    public ResponseEntity<ApiResponse<List<SubjectDTO>>> getSubjectsByUniversity(
+            @PathVariable Integer universityId) {
+        List<SubjectDTO> subjects = universityService.getSubjectsByUniversity(universityId);
+        return ResponseEntity.ok(ApiResponse.success(subjects));
+    }
 } 

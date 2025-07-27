@@ -59,4 +59,12 @@ public interface UniversityService {
      * @return List of matching subjects
      */
     List<SubjectDTO> searchSubjectsByName(String namePattern);
+    
+    /**
+     * Get subjects taught in a specific university
+     * 
+     * @param universityId University ID
+     * @return List of subjects taught in the university
+     */
+    List<SubjectDTO> getSubjectsByUniversity(Integer universityId);
 } 
