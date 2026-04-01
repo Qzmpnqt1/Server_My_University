@@ -6,32 +6,34 @@ import lombok.*;
 import java.time.LocalDateTime;
 
 @Entity
-@Table(name = "grades")
+@Table(name = "grades", uniqueConstraints = {
+        @UniqueConstraint(columnNames = {"student_id", "subject_direction_id"})
+})
 @Getter
 @Setter
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
 public class Grade {
+
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
-    private Integer id;
+    private Long id;
 
-    @ManyToOne
+    @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "student_id", nullable = false)
     private Users student;
 
-    @ManyToOne
+    @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "subject_direction_id", nullable = false)
     private SubjectInDirection subjectDirection;
 
-    @Column
     private Integer grade;
 
     @Column(name = "credit_status")
     private Boolean creditStatus;
 
-    @Column(name = "created_at")
+    @Column(name = "created_at", updatable = false)
     private LocalDateTime createdAt;
 
     @Column(name = "updated_at")
@@ -47,4 +49,4 @@ public class Grade {
     protected void onUpdate() {
         updatedAt = LocalDateTime.now();
     }
-} 
+}

@@ -4,7 +4,6 @@ import jakarta.persistence.*;
 import lombok.*;
 
 import java.time.LocalDateTime;
-import java.util.List;
 
 @Entity
 @Table(name = "classrooms")
@@ -14,13 +13,10 @@ import java.util.List;
 @AllArgsConstructor
 @Builder
 public class Classroom {
+
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
-    private Integer id;
-
-    @ManyToOne
-    @JoinColumn(name = "university_id", nullable = false)
-    private University university;
+    private Long id;
 
     @Column(nullable = false)
     private String building;
@@ -28,17 +24,17 @@ public class Classroom {
     @Column(name = "room_number", nullable = false)
     private String roomNumber;
 
-    @Column
     private Integer capacity;
 
-    @Column(name = "created_at")
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "university_id", nullable = false)
+    private University university;
+
+    @Column(name = "created_at", updatable = false)
     private LocalDateTime createdAt;
 
     @Column(name = "updated_at")
     private LocalDateTime updatedAt;
-
-    @OneToMany(mappedBy = "classroom", cascade = CascadeType.ALL)
-    private List<Schedule> schedules;
 
     @PrePersist
     protected void onCreate() {
@@ -50,4 +46,4 @@ public class Classroom {
     protected void onUpdate() {
         updatedAt = LocalDateTime.now();
     }
-} 
+}

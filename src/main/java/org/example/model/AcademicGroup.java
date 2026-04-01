@@ -4,7 +4,6 @@ import jakarta.persistence.*;
 import lombok.*;
 
 import java.time.LocalDateTime;
-import java.util.List;
 
 @Entity
 @Table(name = "academic_groups")
@@ -14,13 +13,10 @@ import java.util.List;
 @AllArgsConstructor
 @Builder
 public class AcademicGroup {
+
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
-    private Integer id;
-
-    @ManyToOne
-    @JoinColumn(name = "direction_id", nullable = false)
-    private StudyDirection direction;
+    private Long id;
 
     @Column(nullable = false)
     private String name;
@@ -31,17 +27,15 @@ public class AcademicGroup {
     @Column(name = "year_of_admission", nullable = false)
     private Integer yearOfAdmission;
 
-    @Column(name = "created_at")
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "direction_id", nullable = false)
+    private StudyDirection direction;
+
+    @Column(name = "created_at", updatable = false)
     private LocalDateTime createdAt;
 
     @Column(name = "updated_at")
     private LocalDateTime updatedAt;
-
-    @OneToMany(mappedBy = "group", cascade = CascadeType.ALL)
-    private List<StudentProfile> studentProfiles;
-
-    @OneToMany(mappedBy = "group", cascade = CascadeType.ALL)
-    private List<Schedule> schedules;
 
     @PrePersist
     protected void onCreate() {
@@ -53,4 +47,4 @@ public class AcademicGroup {
     protected void onUpdate() {
         updatedAt = LocalDateTime.now();
     }
-} 
+}

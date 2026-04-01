@@ -4,7 +4,6 @@ import jakarta.persistence.*;
 import lombok.*;
 
 import java.time.LocalDateTime;
-import java.util.List;
 
 @Entity
 @Table(name = "subjects_in_directions")
@@ -14,15 +13,16 @@ import java.util.List;
 @AllArgsConstructor
 @Builder
 public class SubjectInDirection {
+
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
-    private Integer id;
+    private Long id;
 
-    @ManyToOne
+    @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "subject_id", nullable = false)
     private Subject subject;
 
-    @ManyToOne
+    @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "direction_id", nullable = false)
     private StudyDirection direction;
 
@@ -32,17 +32,16 @@ public class SubjectInDirection {
     @Column(nullable = false)
     private Integer semester;
 
-    @Column(name = "created_at")
+    @Enumerated(EnumType.STRING)
+    @Column(name = "final_assessment_type", nullable = false, length = 20)
+    @Builder.Default
+    private FinalAssessmentType finalAssessmentType = FinalAssessmentType.EXAM;
+
+    @Column(name = "created_at", updatable = false)
     private LocalDateTime createdAt;
 
     @Column(name = "updated_at")
     private LocalDateTime updatedAt;
-
-    @OneToMany(mappedBy = "subjectDirection", cascade = CascadeType.ALL)
-    private List<SubjectLessonType> lessonTypes;
-
-    @OneToMany(mappedBy = "subjectDirection", cascade = CascadeType.ALL)
-    private List<Grade> grades;
 
     @PrePersist
     protected void onCreate() {
@@ -54,4 +53,4 @@ public class SubjectInDirection {
     protected void onUpdate() {
         updatedAt = LocalDateTime.now();
     }
-} 
+}

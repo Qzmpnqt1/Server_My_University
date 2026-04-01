@@ -4,4 +4,4 @@ public enum LessonType {
     LECTURE,
     SEMINAR,
     LABORATORY
-} 
+}

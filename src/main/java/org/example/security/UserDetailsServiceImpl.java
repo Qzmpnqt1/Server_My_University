@@ -10,7 +10,7 @@ import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.stereotype.Service;
 
-import java.util.Collections;
+import java.util.List;
 
 @Service
 @RequiredArgsConstructor
@@ -21,20 +21,14 @@ public class UserDetailsServiceImpl implements UserDetailsService {
     @Override
     public UserDetails loadUserByUsername(String email) throws UsernameNotFoundException {
         Users user = usersRepository.findByEmail(email)
-                .orElseThrow(() -> new UsernameNotFoundException("Пользователь с email " + email + " не найден"));
-
-        // Проверяем, что пользователь активен
-        if (!user.getIsActive()) {
-            throw new UsernameNotFoundException("Пользователь деактивирован");
-        }
-
-        // Создаем роль на основе типа пользователя
-        String role = "ROLE_" + user.getUserType().name();
+                .orElseThrow(() -> new UsernameNotFoundException("Пользователь не найден: " + email));
 
         return new User(
                 user.getEmail(),
-                user.getPassword(),
-                Collections.singletonList(new SimpleGrantedAuthority(role))
+                user.getPasswordHash(),
+                user.getIsActive(),
+                true, true, true,
+                List.of(new SimpleGrantedAuthority("ROLE_" + user.getUserType().name()))
         );
     }
-} 
+}

@@ -13,23 +13,24 @@ import java.time.LocalDateTime;
 @AllArgsConstructor
 @Builder
 public class StudentProfile {
+
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
-    private Integer id;
+    private Long id;
 
-    @OneToOne
+    @OneToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "user_id", nullable = false, unique = true)
     private Users user;
 
-    @ManyToOne
+    @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "group_id", nullable = false)
     private AcademicGroup group;
 
-    @ManyToOne
+    @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "institute_id", nullable = false)
     private Institute institute;
 
-    @Column(name = "created_at")
+    @Column(name = "created_at", updatable = false)
     private LocalDateTime createdAt;
 
     @Column(name = "updated_at")
@@ -45,4 +46,4 @@ public class StudentProfile {
     protected void onUpdate() {
         updatedAt = LocalDateTime.now();
     }
-} 
+}

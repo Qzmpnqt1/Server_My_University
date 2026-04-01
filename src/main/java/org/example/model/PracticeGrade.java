@@ -1,0 +1,52 @@
+package org.example.model;
+
+import jakarta.persistence.*;
+import lombok.*;
+
+import java.time.LocalDateTime;
+
+@Entity
+@Table(name = "practice_grades", uniqueConstraints = {
+        @UniqueConstraint(columnNames = {"student_id", "practice_id"})
+})
+@Getter
+@Setter
+@NoArgsConstructor
+@AllArgsConstructor
+@Builder
+public class PracticeGrade {
+
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "student_id", nullable = false)
+    private Users student;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "practice_id", nullable = false)
+    private SubjectPractice practice;
+
+    private Integer grade;
+
+    @Column(name = "credit_status")
+    private Boolean creditStatus;
+
+    @Column(name = "created_at", updatable = false)
+    private LocalDateTime createdAt;
+
+    @Column(name = "updated_at")
+    private LocalDateTime updatedAt;
+
+    @PrePersist
+    protected void onCreate() {
+        createdAt = LocalDateTime.now();
+        updatedAt = LocalDateTime.now();
+    }
+
+    @PreUpdate
+    protected void onUpdate() {
+        updatedAt = LocalDateTime.now();
+    }
+}

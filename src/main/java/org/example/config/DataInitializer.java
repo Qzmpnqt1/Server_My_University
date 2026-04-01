@@ -1,54 +1,37 @@
 package org.example.config;
 
-import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
 import org.example.model.UserType;
 import org.example.model.Users;
 import org.example.repository.UsersRepository;
-import org.springframework.context.annotation.Configuration;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.boot.CommandLineRunner;
+import org.springframework.context.annotation.Profile;
 import org.springframework.security.crypto.password.PasswordEncoder;
-import org.springframework.transaction.annotation.Transactional;
+import org.springframework.stereotype.Component;
 
-@Slf4j
-@Configuration
+@Component
 @RequiredArgsConstructor
-public class DataInitializer {
+@Profile("!test")
+public class DataInitializer implements CommandLineRunner {
+
+    private static final Logger log = LoggerFactory.getLogger(DataInitializer.class);
 
     private final UsersRepository usersRepository;
     private final PasswordEncoder passwordEncoder;
 
-    @PostConstruct
-    @Transactional
-    public void init() {
-        try {
-            log.info("Начинаем инициализацию тестовых данных");
-            
-            // Проверяем, есть ли уже пользователи в базе данных
-            long userCount = usersRepository.count();
-            log.info("Количество пользователей в БД: {}", userCount);
-            
-            // Если пользователей нет, создаем тестовых
-            if (userCount == 0) {
-                log.info("Создаем тестового пользователя");
-                
-                Users admin = Users.builder()
-                    .email("admin@example.com")
-                    .password(passwordEncoder.encode("admin123"))
-                    .firstName("Администратор")
-                    .lastName("Системный")
-                    .middleName("Тестович")
-                    .userType(UserType.ADMIN)
-                    .isActive(true)
-                    .build();
-                
+    @Override
+    public void run(String... args) {
+        if (usersRepository.findByEmail("admin@university.ru").isPresent()) {
+            Users admin = usersRepository.findByEmail("admin@university.ru").get();
+            if (!passwordEncoder.matches("Admin123!", admin.getPasswordHash())) {
+                admin.setPasswordHash(passwordEncoder.encode("Admin123!"));
                 usersRepository.save(admin);
-                log.info("Создан пользователь с ID: {}", admin.getId());
+                log.info("Admin password has been reset to the default");
             }
-            
-            log.info("Инициализация тестовых данных завершена");
-        } catch (Exception e) {
-            log.error("Ошибка при инициализации тестовых данных", e);
+            return;
         }
+        log.info("No admin user found — the Flyway seed should have created one");
     }
-} 
+}

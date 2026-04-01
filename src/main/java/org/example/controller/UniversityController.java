@@ -1,70 +1,61 @@
 package org.example.controller;
 
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
-import org.example.dto.*;
+import org.example.dto.request.UniversityRequest;
+import org.example.dto.response.UniversityResponse;
 import org.example.service.UniversityService;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
+import java.security.Principal;
 import java.util.List;
 
 @RestController
-@RequestMapping("/api/universities")
+@RequestMapping("/api/v1/universities")
 @RequiredArgsConstructor
 public class UniversityController {
+
     private final UniversityService universityService;
 
+    private static String emailOrNull(Principal principal) {
+        if (principal == null) return null;
+        String n = principal.getName();
+        return (n == null || n.isBlank() || "anonymousUser".equals(n)) ? null : n;
+    }
+
     @GetMapping
-    public ResponseEntity<ApiResponse<List<UniversityDTO>>> getAllUniversities() {
-        List<UniversityDTO> universities = universityService.getAllUniversities();
-        return ResponseEntity.ok(ApiResponse.success(universities));
+    public ResponseEntity<List<UniversityResponse>> getAll(Principal principal) {
+        return ResponseEntity.ok(universityService.getAll(emailOrNull(principal)));
     }
 
-    @GetMapping("/{universityId}/institutes")
-    public ResponseEntity<ApiResponse<List<InstituteDTO>>> getInstitutesByUniversity(
-            @PathVariable Integer universityId) {
-        List<InstituteDTO> institutes = universityService.getInstitutesByUniversity(universityId);
-        return ResponseEntity.ok(ApiResponse.success(institutes));
+    @GetMapping("/{id}")
+    public ResponseEntity<UniversityResponse> getById(@PathVariable Long id, Principal principal) {
+        return ResponseEntity.ok(universityService.getById(id, emailOrNull(principal)));
     }
 
-    @GetMapping("/institutes/{instituteId}/directions")
-    public ResponseEntity<ApiResponse<List<StudyDirectionDTO>>> getDirectionsByInstitute(
-            @PathVariable Integer instituteId) {
-        List<StudyDirectionDTO> directions = universityService.getDirectionsByInstitute(instituteId);
-        return ResponseEntity.ok(ApiResponse.success(directions));
+    @PostMapping
+    @PreAuthorize("hasRole('ADMIN')")
+    public ResponseEntity<UniversityResponse> create(@Valid @RequestBody UniversityRequest request,
+                                                     Principal principal) {
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .body(universityService.create(request, principal.getName()));
     }
 
-    @GetMapping("/directions/{directionId}/groups")
-    public ResponseEntity<ApiResponse<List<AcademicGroupDTO>>> getGroupsByDirection(
-            @PathVariable Integer directionId) {
-        List<AcademicGroupDTO> groups = universityService.getGroupsByDirection(directionId);
-        return ResponseEntity.ok(ApiResponse.success(groups));
+    @PutMapping("/{id}")
+    @PreAuthorize("hasRole('ADMIN')")
+    public ResponseEntity<UniversityResponse> update(@PathVariable Long id,
+                                                     @Valid @RequestBody UniversityRequest request,
+                                                     Principal principal) {
+        return ResponseEntity.ok(universityService.update(id, request, principal.getName()));
     }
 
-    @GetMapping("/directions/{directionId}/course/{course}/groups")
-    public ResponseEntity<ApiResponse<List<AcademicGroupDTO>>> getGroupsByDirectionAndCourse(
-            @PathVariable Integer directionId,
-            @PathVariable Integer course) {
-        List<AcademicGroupDTO> groups = universityService.getGroupsByDirectionAndCourse(directionId, course);
-        return ResponseEntity.ok(ApiResponse.success(groups));
+    @DeleteMapping("/{id}")
+    @PreAuthorize("hasRole('ADMIN')")
+    public ResponseEntity<Void> delete(@PathVariable Long id, Principal principal) {
+        universityService.delete(id, principal.getName());
+        return ResponseEntity.noContent().build();
     }
-
-    @GetMapping("/subjects")
-    public ResponseEntity<ApiResponse<List<SubjectDTO>>> getAllSubjects() {
-        List<SubjectDTO> subjects = universityService.getAllSubjects();
-        return ResponseEntity.ok(ApiResponse.success(subjects));
-    }
-
-    @GetMapping("/subjects/search")
-    public ResponseEntity<ApiResponse<List<SubjectDTO>>> searchSubjects(@RequestParam String query) {
-        List<SubjectDTO> subjects = universityService.searchSubjectsByName(query);
-        return ResponseEntity.ok(ApiResponse.success(subjects));
-    }
-    
-    @GetMapping("/{universityId}/subjects")
-    public ResponseEntity<ApiResponse<List<SubjectDTO>>> getSubjectsByUniversity(
-            @PathVariable Integer universityId) {
-        List<SubjectDTO> subjects = universityService.getSubjectsByUniversity(universityId);
-        return ResponseEntity.ok(ApiResponse.success(subjects));
-    }
-} 
+}

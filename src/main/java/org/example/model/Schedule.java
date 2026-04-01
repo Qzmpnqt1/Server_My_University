@@ -14,28 +14,29 @@ import java.time.LocalTime;
 @AllArgsConstructor
 @Builder
 public class Schedule {
+
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
-    private Integer id;
+    private Long id;
 
-    @ManyToOne
+    @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "subject_type_id", nullable = false)
     private SubjectLessonType subjectType;
 
-    @ManyToOne
+    @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "teacher_id", nullable = false)
     private Users teacher;
 
-    @ManyToOne
+    @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "group_id", nullable = false)
     private AcademicGroup group;
 
-    @ManyToOne
+    @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "classroom_id", nullable = false)
     private Classroom classroom;
 
     @Column(name = "day_of_week", nullable = false)
-    private Integer dayOfWeek; // 1-7 (понедельник-воскресенье)
+    private Integer dayOfWeek;
 
     @Column(name = "start_time", nullable = false)
     private LocalTime startTime;
@@ -44,9 +45,9 @@ public class Schedule {
     private LocalTime endTime;
 
     @Column(name = "week_number", nullable = false)
-    private Integer weekNumber; // 1 - нечетная, 2 - четная
+    private Integer weekNumber;
 
-    @Column(name = "created_at")
+    @Column(name = "created_at", updatable = false)
     private LocalDateTime createdAt;
 
     @Column(name = "updated_at")
@@ -62,4 +63,4 @@ public class Schedule {
     protected void onUpdate() {
         updatedAt = LocalDateTime.now();
     }
-} 
+}

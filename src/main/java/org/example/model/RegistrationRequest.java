@@ -13,12 +13,16 @@ import java.time.LocalDateTime;
 @AllArgsConstructor
 @Builder
 public class RegistrationRequest {
+
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
-    private Integer id;
+    private Long id;
 
     @Column(nullable = false)
     private String email;
+
+    @Column(name = "password_hash", nullable = false)
+    private String passwordHash;
 
     @Column(name = "first_name", nullable = false)
     private String firstName;
@@ -29,24 +33,30 @@ public class RegistrationRequest {
     @Column(name = "middle_name")
     private String middleName;
 
-    @ManyToOne
-    @JoinColumn(name = "university_id", nullable = false)
-    private University university;
-
     @Enumerated(EnumType.STRING)
     @Column(name = "user_type", nullable = false)
     private UserType userType;
 
-    @ManyToOne
+    @Builder.Default
+    @Enumerated(EnumType.STRING)
+    private RegistrationStatus status = RegistrationStatus.PENDING;
+
+    @Column(name = "rejection_reason")
+    private String rejectionReason;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "university_id", nullable = false)
+    private University university;
+
+    @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "group_id")
     private AcademicGroup group;
 
-    @Enumerated(EnumType.STRING)
-    @Column
-    @Builder.Default
-    private RegistrationStatus status = RegistrationStatus.PENDING;
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "institute_id")
+    private Institute institute;
 
-    @Column(name = "created_at")
+    @Column(name = "created_at", updatable = false)
     private LocalDateTime createdAt;
 
     @Column(name = "updated_at")
@@ -62,4 +72,4 @@ public class RegistrationRequest {
     protected void onUpdate() {
         updatedAt = LocalDateTime.now();
     }
-} 
+}

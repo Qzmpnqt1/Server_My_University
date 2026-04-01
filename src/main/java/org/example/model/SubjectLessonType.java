@@ -4,7 +4,6 @@ import jakarta.persistence.*;
 import lombok.*;
 
 import java.time.LocalDateTime;
-import java.util.List;
 
 @Entity
 @Table(name = "subject_lesson_types")
@@ -14,11 +13,12 @@ import java.util.List;
 @AllArgsConstructor
 @Builder
 public class SubjectLessonType {
+
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
-    private Integer id;
+    private Long id;
 
-    @ManyToOne
+    @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "subject_direction_id", nullable = false)
     private SubjectInDirection subjectDirection;
 
@@ -26,14 +26,11 @@ public class SubjectLessonType {
     @Column(name = "lesson_type", nullable = false)
     private LessonType lessonType;
 
-    @Column(name = "created_at")
+    @Column(name = "created_at", updatable = false)
     private LocalDateTime createdAt;
 
     @Column(name = "updated_at")
     private LocalDateTime updatedAt;
-
-    @OneToMany(mappedBy = "subjectType", cascade = CascadeType.ALL)
-    private List<Schedule> schedules;
 
     @PrePersist
     protected void onCreate() {
@@ -45,4 +42,4 @@ public class SubjectLessonType {
     protected void onUpdate() {
         updatedAt = LocalDateTime.now();
     }
-} 
+}

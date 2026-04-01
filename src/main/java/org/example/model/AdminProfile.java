@@ -13,22 +13,22 @@ import java.time.LocalDateTime;
 @AllArgsConstructor
 @Builder
 public class AdminProfile {
+
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
-    private Integer id;
+    private Long id;
 
-    @OneToOne
+    @OneToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "user_id", nullable = false, unique = true)
     private Users user;
 
-    @ManyToOne
+    @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "university_id", nullable = false)
     private University university;
 
-    @Column
     private String role;
 
-    @Column(name = "created_at")
+    @Column(name = "created_at", updatable = false)
     private LocalDateTime createdAt;
 
     @Column(name = "updated_at")
@@ -44,4 +44,4 @@ public class AdminProfile {
     protected void onUpdate() {
         updatedAt = LocalDateTime.now();
     }
-} 
+}

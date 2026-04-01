@@ -1,0 +1,27 @@
+CREATE TABLE subjects (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    name VARCHAR(255) NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE subjects_in_directions (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    subject_id BIGINT NOT NULL,
+    direction_id BIGINT NOT NULL,
+    course INT NOT NULL,
+    semester INT NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    CONSTRAINT fk_sid_subject FOREIGN KEY (subject_id) REFERENCES subjects(id),
+    CONSTRAINT fk_sid_direction FOREIGN KEY (direction_id) REFERENCES study_directions(id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE subject_lesson_types (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    subject_direction_id BIGINT NOT NULL,
+    lesson_type ENUM('LECTURE', 'SEMINAR', 'LABORATORY') NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    CONSTRAINT fk_slt_subject_direction FOREIGN KEY (subject_direction_id) REFERENCES subjects_in_directions(id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

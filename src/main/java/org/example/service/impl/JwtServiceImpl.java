@@ -23,15 +23,15 @@ public class JwtServiceImpl implements JwtService {
     @Value("${jwt.secret}")
     private String jwtSecret;
 
-    @Value("${jwt.expiration:86400000}") // 24 часа по умолчанию
+    @Value("${jwt.expiration:86400000}")
     private long jwtExpiration;
 
     @Override
     public String generateToken(Users user) {
         Map<String, Object> claims = new HashMap<>();
-        claims.put("id", user.getId());
-        claims.put("userType", user.getUserType());
-        
+        claims.put("userId", user.getId());
+        claims.put("userType", user.getUserType().name());
+
         return Jwts.builder()
                 .setClaims(claims)
                 .setSubject(user.getEmail())
@@ -44,6 +44,18 @@ public class JwtServiceImpl implements JwtService {
     @Override
     public String extractUsername(String token) {
         return extractClaim(token, Claims::getSubject);
+    }
+
+    @Override
+    public Long extractUserId(String token) {
+        Claims claims = extractAllClaims(token);
+        return claims.get("userId", Long.class);
+    }
+
+    @Override
+    public String extractUserType(String token) {
+        Claims claims = extractAllClaims(token);
+        return claims.get("userType", String.class);
     }
 
     @Override
@@ -73,4 +85,4 @@ public class JwtServiceImpl implements JwtService {
         byte[] keyBytes = jwtSecret.getBytes(StandardCharsets.UTF_8);
         return Keys.hmacShaKeyFor(keyBytes);
     }
-} 
+}

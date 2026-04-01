@@ -13,15 +13,16 @@ import java.time.LocalDateTime;
 @AllArgsConstructor
 @Builder
 public class Users {
+
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
-    private Integer id;
+    private Long id;
 
     @Column(nullable = false, unique = true)
     private String email;
 
     @Column(name = "password_hash", nullable = false)
-    private String password;
+    private String passwordHash;
 
     @Column(name = "first_name", nullable = false)
     private String firstName;
@@ -36,11 +37,11 @@ public class Users {
     @Column(name = "user_type", nullable = false)
     private UserType userType;
 
-    @Column(name = "is_active")
     @Builder.Default
+    @Column(name = "is_active")
     private Boolean isActive = true;
 
-    @Column(name = "created_at")
+    @Column(name = "created_at", updatable = false)
     private LocalDateTime createdAt;
 
     @Column(name = "updated_at")

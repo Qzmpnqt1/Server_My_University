@@ -7,6 +7,7 @@ import org.springframework.stereotype.Repository;
 import java.util.List;
 
 @Repository
-public interface InstituteRepository extends JpaRepository<Institute, Integer> {
-    List<Institute> findByUniversityIdOrderByNameAsc(Integer universityId);
-} 
+public interface InstituteRepository extends JpaRepository<Institute, Long> {
+
+    List<Institute> findByUniversityId(Long universityId);
+}

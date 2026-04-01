@@ -7,8 +7,9 @@ import org.springframework.stereotype.Repository;
 import java.util.List;
 
 @Repository
-public interface AcademicGroupRepository extends JpaRepository<AcademicGroup, Integer> {
-    List<AcademicGroup> findByDirectionIdOrderByNameAsc(Integer directionId);
-    
-    List<AcademicGroup> findByDirectionIdAndCourseOrderByNameAsc(Integer directionId, Integer course);
-} 
+public interface AcademicGroupRepository extends JpaRepository<AcademicGroup, Long> {
+
+    List<AcademicGroup> findByDirectionId(Long directionId);
+
+    List<AcademicGroup> findByDirection_Institute_University_Id(Long universityId);
+}

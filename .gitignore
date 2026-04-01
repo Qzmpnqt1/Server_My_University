@@ -40,3 +40,6 @@ bin/
 
 ### Mac OS ###
 .DS_Store
+
+# Локальный пароль MySQL и другие секреты (см. application-local.properties.example)
+/application-local.properties

@@ -1,160 +1,232 @@
 package org.example.service.impl;
 
+import com.datastax.oss.driver.api.core.cql.Row;
 import com.datastax.oss.driver.api.core.uuid.Uuids;
-import lombok.RequiredArgsConstructor;
-import org.example.dto.ApiResponse;
-import org.example.model.cassandra.*;
-import org.example.repository.cassandra.*;
+import org.example.dto.request.SendMessageRequest;
+import org.example.dto.response.ChatContactResponse;
+import org.example.dto.response.ConversationResponse;
+import org.example.dto.response.MessageResponse;
+import org.example.exception.AccessDeniedException;
+import org.example.exception.BadRequestException;
+import org.example.exception.ResourceNotFoundException;
+import org.example.model.*;
+import org.example.repository.StudentProfileRepository;
+import org.example.repository.TeacherProfileRepository;
+import org.example.repository.UsersRepository;
+import org.example.repository.cassandra.CassandraConversationRepository;
+import org.example.repository.cassandra.CassandraMessageRepository;
 import org.example.service.ChatService;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
-import org.springframework.context.annotation.Profile;
+import org.example.service.NotificationService;
+import org.example.service.UniversityScopeService;
 import org.springframework.stereotype.Service;
 
+import java.nio.charset.StandardCharsets;
 import java.time.Instant;
-import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
-import java.util.Optional;
+import java.util.Objects;
 import java.util.UUID;
 
-/**
- * Полная реализация сервиса чатов с использованием Cassandra.
- * Активируется только при использовании профиля "cassandra".
- */
 @Service
-@RequiredArgsConstructor
-@ConditionalOnProperty(name = "spring.data.cassandra.enabled", havingValue = "true", matchIfMissing = false)
-@Profile("cassandra")
 public class ChatServiceImpl implements ChatService {
 
-    private final ChatRepository chatRepository;
-    private final MessageRepository messageRepository;
-    private final ChatParticipantRepository participantRepository;
-    private final UserChatRepository userChatRepository;
+    private final UsersRepository usersRepository;
+    private final StudentProfileRepository studentProfileRepository;
+    private final TeacherProfileRepository teacherProfileRepository;
+    private final CassandraConversationRepository conversationRepo;
+    private final CassandraMessageRepository messageRepo;
+    private final NotificationService notificationService;
+    private final UniversityScopeService universityScopeService;
 
-    @Override
-    public ApiResponse<Chat> createChat(UUID userId, List<UUID> participantIds, String chatName, boolean isGroup) {
-        try {
-            // Create a new chat ID
-            UUID chatId = UUID.randomUUID();
-            
-            // Create chat entry for the creator
-            Chat chat = new Chat();
-            chat.setKey(new Chat.ChatPrimaryKey(userId, chatId));
-            chat.setIsGroup(isGroup);
-            chat.setChatName(chatName);
-            chat.setCreatedAt(Instant.now());
-            
-            chatRepository.save(chat);
-            
-            // Add chat creator as participant and admin
-            ChatParticipant creatorParticipant = new ChatParticipant();
-            creatorParticipant.setKey(new ChatParticipant.ChatParticipantPrimaryKey(chatId, userId));
-            creatorParticipant.setJoinedAt(Instant.now());
-            creatorParticipant.setIsAdmin(true);
-            
-            participantRepository.save(creatorParticipant);
-            
-            // Initialize creator's unread counter
-            UserChat creatorUserChat = new UserChat();
-            creatorUserChat.setKey(new UserChat.UserChatPrimaryKey(userId, chatId));
-            
-            userChatRepository.save(creatorUserChat);
-            
-            // Add all participants
-            for (UUID participantId : participantIds) {
-                if (!participantId.equals(userId)) {
-                    // Create chat entry for each participant
-                    Chat participantChat = new Chat();
-                    participantChat.setKey(new Chat.ChatPrimaryKey(participantId, chatId));
-                    participantChat.setIsGroup(isGroup);
-                    participantChat.setChatName(chatName);
-                    participantChat.setCreatedAt(Instant.now());
-                    
-                    chatRepository.save(participantChat);
-                    
-                    // Add participant to chat
-                    ChatParticipant participant = new ChatParticipant();
-                    participant.setKey(new ChatParticipant.ChatParticipantPrimaryKey(chatId, participantId));
-                    participant.setJoinedAt(Instant.now());
-                    participant.setIsAdmin(false);
-                    
-                    participantRepository.save(participant);
-                    
-                    // Initialize participant's unread counter
-                    UserChat participantUserChat = new UserChat();
-                    participantUserChat.setKey(new UserChat.UserChatPrimaryKey(participantId, chatId));
-                    
-                    userChatRepository.save(participantUserChat);
-                }
-            }
-            
-            return ApiResponse.success("Чат успешно создан", chat);
-        } catch (Exception e) {
-            return ApiResponse.error("Ошибка при создании чата: " + e.getMessage());
+    public ChatServiceImpl(UsersRepository usersRepository,
+                           StudentProfileRepository studentProfileRepository,
+                           TeacherProfileRepository teacherProfileRepository,
+                           CassandraConversationRepository conversationRepo,
+                           CassandraMessageRepository messageRepo,
+                           NotificationService notificationService,
+                           UniversityScopeService universityScopeService) {
+        this.usersRepository = usersRepository;
+        this.studentProfileRepository = studentProfileRepository;
+        this.teacherProfileRepository = teacherProfileRepository;
+        this.conversationRepo = conversationRepo;
+        this.messageRepo = messageRepo;
+        this.notificationService = notificationService;
+        this.universityScopeService = universityScopeService;
+    }
+
+    private void ensureCassandraAvailable() {
+        if (!conversationRepo.isAvailable()) {
+            throw new BadRequestException("Чат-сервис недоступен");
         }
     }
 
     @Override
-    public ApiResponse<List<Chat>> getUserChats(UUID userId) {
-        try {
-            List<Chat> chats = chatRepository.findByUserId(userId);
-            return ApiResponse.success(chats);
-        } catch (Exception e) {
-            return ApiResponse.error("Ошибка при получении списка чатов: " + e.getMessage());
-        }
+    public List<ChatContactResponse> listChatContacts(String email) {
+        Users self = findUserByEmail(email);
+        Long scopeUni = requireUniversityIdForMessaging(email, self);
+        return usersRepository.findAll().stream()
+                .filter(u -> !u.getId().equals(self.getId()))
+                .filter(u -> Boolean.TRUE.equals(u.getIsActive()))
+                .filter(u -> universityScopeService.userBelongsToUniversity(u.getId(), scopeUni))
+                .sorted(Comparator.comparing(Users::getLastName, Comparator.nullsLast(String::compareToIgnoreCase))
+                        .thenComparing(Users::getFirstName, Comparator.nullsLast(String::compareToIgnoreCase)))
+                .map(u -> ChatContactResponse.builder()
+                        .id(u.getId())
+                        .email(u.getEmail())
+                        .firstName(u.getFirstName())
+                        .lastName(u.getLastName())
+                        .middleName(u.getMiddleName())
+                        .userType(u.getUserType() != null ? u.getUserType().name() : null)
+                        .build())
+                .toList();
     }
 
     @Override
-    public ApiResponse<Message> sendMessage(UUID chatId, UUID senderId, String content) {
-        try {
-            // Check if user is participant
-            Optional<ChatParticipant> participant = participantRepository.findById(
-                    new ChatParticipant.ChatParticipantPrimaryKey(chatId, senderId));
-            
-            if (participant.isEmpty()) {
-                return ApiResponse.error("Пользователь не является участником чата");
-            }
-            
-            // Create and save message
-            Message message = new Message();
-            message.setKey(new Message.MessagePrimaryKey(chatId, Uuids.timeBased())); // Use time-based UUID
-            message.setSenderId(senderId);
-            message.setContent(content);
-            message.setIsRead(false);
-            
-            messageRepository.save(message);
-            
-            // Update unread counters for all participants except sender
-            List<ChatParticipant> participants = participantRepository.findByChatId(chatId);
-            for (ChatParticipant p : participants) {
-                if (!p.getKey().getUserId().equals(senderId)) {
-                    userChatRepository.incrementUnreadCount(p.getKey().getUserId(), chatId);
-                }
-            }
-            
-            return ApiResponse.success("Сообщение отправлено", message);
-        } catch (Exception e) {
-            return ApiResponse.error("Ошибка при отправке сообщения: " + e.getMessage());
-        }
+    public List<ConversationResponse> getMyConversations(String email) {
+        ensureCassandraAvailable();
+        Users user = findUserByEmail(email);
+
+        return conversationRepo.findByUserId(user.getId()).stream()
+                .map(this::mapConversation)
+                .toList();
     }
 
     @Override
-    public ApiResponse<List<Message>> getChatMessages(UUID chatId, int limit) {
-        try {
-            List<Message> messages = messageRepository.findByChatIdWithLimit(chatId, limit);
-            return ApiResponse.success(messages);
-        } catch (Exception e) {
-            return ApiResponse.error("Ошибка при получении сообщений: " + e.getMessage());
-        }
+    public List<MessageResponse> getMessages(String conversationId, String email,
+                                             int limit, Instant before) {
+        ensureCassandraAvailable();
+        Users user = findUserByEmail(email);
+        UUID convUuid = parseConversationId(conversationId);
+
+        verifyParticipant(user.getId(), convUuid);
+
+        int effectiveLimit = Math.min(Math.max(limit, 1), 200);
+        List<Row> rows = (before != null)
+                ? messageRepo.findByConversationIdBefore(convUuid, before, effectiveLimit)
+                : messageRepo.findByConversationId(convUuid, effectiveLimit);
+
+        return rows.stream().map(this::mapMessage).toList();
     }
 
     @Override
-    public ApiResponse<?> markMessagesAsRead(UUID chatId, UUID userId, UUID messageId) {
+    public MessageResponse sendMessage(SendMessageRequest request, String email) {
+        ensureCassandraAvailable();
+        Users sender = findUserByEmail(email);
+        Users recipient = usersRepository.findById(request.getRecipientId())
+                .orElseThrow(() -> new ResourceNotFoundException("Получатель не найден"));
+
+        if (sender.getId().equals(recipient.getId())) {
+            throw new BadRequestException("Нельзя отправить сообщение самому себе");
+        }
+
+        Long senderUni = requireUniversityIdForMessaging(email, sender);
+        if (!universityScopeService.userBelongsToUniversity(recipient.getId(), senderUni)) {
+            throw new BadRequestException("Можно отправлять сообщения только пользователям своего вуза");
+        }
+
+        UUID conversationId = generateConversationId(sender.getId(), recipient.getId());
+        UUID messageId = Uuids.timeBased();
+        Instant now = Instant.now();
+        String senderFullName = buildFullName(sender);
+        String recipientFullName = buildFullName(recipient);
+
+        messageRepo.insert(conversationId, messageId, sender.getId(),
+                senderFullName, request.getText(), now);
+
+        conversationRepo.deleteOldAndInsertNew(
+                sender.getId(), conversationId, recipient.getId(),
+                recipientFullName, request.getText(), now, 0);
+        conversationRepo.deleteOldAndInsertNew(
+                recipient.getId(), conversationId, sender.getId(),
+                senderFullName, request.getText(), now, 1);
+
+        notificationService.notifyNewChatMessage(recipient.getId(), senderFullName);
+
+        return MessageResponse.builder()
+                .messageId(messageId.toString())
+                .conversationId(conversationId.toString())
+                .senderId(sender.getId())
+                .senderName(senderFullName)
+                .text(request.getText())
+                .sentAt(now)
+                .build();
+    }
+
+    @Override
+    public void markAsRead(String conversationId, String email) {
+        ensureCassandraAvailable();
+        Users user = findUserByEmail(email);
+        UUID convUuid = parseConversationId(conversationId);
+
+        verifyParticipant(user.getId(), convUuid);
+        conversationRepo.markAsRead(user.getId(), convUuid);
+    }
+
+    private Users findUserByEmail(String email) {
+        return usersRepository.findByEmail(email)
+                .orElseThrow(() -> new ResourceNotFoundException("Пользователь не найден"));
+    }
+
+    /**
+     * Вуз текущего пользователя для списка контактов и отправки сообщений (студент / преподаватель / админ).
+     */
+    private Long requireUniversityIdForMessaging(String email, Users self) {
+        return switch (self.getUserType()) {
+            case ADMIN -> universityScopeService.requireAdminUniversityId(email);
+            case STUDENT -> studentProfileRepository.findByUserId(self.getId())
+                    .map(sp -> sp.getInstitute().getUniversity().getId())
+                    .orElseThrow(() -> new BadRequestException("Профиль студента не найден или не привязан к вузу"));
+            case TEACHER -> teacherProfileRepository.findByUserId(self.getId())
+                    .map(tp -> tp.getInstitute() != null ? tp.getInstitute().getUniversity().getId() : null)
+                    .filter(Objects::nonNull)
+                    .orElseThrow(() -> new BadRequestException("Профиль преподавателя не привязан к институту вуза"));
+            default -> throw new AccessDeniedException("Чат недоступен для данного типа пользователя");
+        };
+    }
+
+    private UUID parseConversationId(String id) {
         try {
-            userChatRepository.markAsRead(userId, chatId, messageId);
-            return ApiResponse.success("Сообщения отмечены как прочитанные", null);
-        } catch (Exception e) {
-            return ApiResponse.error("Ошибка при отметке сообщений как прочитанных: " + e.getMessage());
+            return UUID.fromString(id);
+        } catch (IllegalArgumentException e) {
+            throw new BadRequestException("Некорректный формат ID беседы");
         }
     }
-} 
+
+    private void verifyParticipant(Long userId, UUID conversationId) {
+        if (conversationRepo.findConversationEntry(userId, conversationId).isEmpty()) {
+            throw new BadRequestException("У вас нет доступа к этой беседе");
+        }
+    }
+
+    private ConversationResponse mapConversation(Row row) {
+        return ConversationResponse.builder()
+                .conversationId(row.getUuid("conversation_id").toString())
+                .participantId(row.getLong("participant_id"))
+                .participantName(row.getString("participant_name"))
+                .lastMessageText(row.getString("last_message_text"))
+                .lastMessageAt(row.getInstant("last_message_at"))
+                .unreadCount(row.getInt("unread_count"))
+                .build();
+    }
+
+    private MessageResponse mapMessage(Row row) {
+        return MessageResponse.builder()
+                .messageId(row.getUuid("message_id").toString())
+                .senderId(row.getLong("sender_id"))
+                .senderName(row.getString("sender_name"))
+                .text(row.getString("text"))
+                .sentAt(row.getInstant("sent_at"))
+                .build();
+    }
+
+    private String buildFullName(Users user) {
+        return user.getLastName() + " " + user.getFirstName();
+    }
+
+    public static UUID generateConversationId(Long userId1, Long userId2) {
+        long smaller = Math.min(userId1, userId2);
+        long larger = Math.max(userId1, userId2);
+        String seed = smaller + ":" + larger;
+        return UUID.nameUUIDFromBytes(seed.getBytes(StandardCharsets.UTF_8));
+    }
+}

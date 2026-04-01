@@ -1,181 +1,329 @@
 package org.example.service.impl;
 
+import jakarta.persistence.criteria.Predicate;
 import lombok.RequiredArgsConstructor;
-import org.example.dto.ApiResponse;
-import org.example.dto.RegistrationRequestDTO;
+import org.example.dto.request.ApproveRejectRequest;
+import org.example.dto.request.GuestRegistrationLookupRequest;
+import org.example.dto.request.RegisterRequest;
+import org.example.dto.request.UpdatePendingRegistrationRequest;
+import org.example.dto.response.GuestRegistrationStatusResponse;
+import org.example.dto.response.RegistrationRequestResponse;
+import org.example.exception.BadRequestException;
+import org.example.exception.ConflictException;
+import org.example.exception.ResourceNotFoundException;
 import org.example.model.*;
 import org.example.repository.*;
+import org.example.service.AuditService;
+import org.example.service.NotificationService;
 import org.example.service.RegistrationService;
+import org.example.service.UniversityScopeService;
+import org.springframework.data.domain.Sort;
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.time.LocalDateTime;
-import java.util.HashSet;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
-import java.util.Set;
 import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
 public class RegistrationServiceImpl implements RegistrationService {
+
     private final RegistrationRequestRepository registrationRequestRepository;
     private final UsersRepository usersRepository;
     private final UniversityRepository universityRepository;
-    private final InstituteRepository instituteRepository;
     private final AcademicGroupRepository academicGroupRepository;
-    private final SubjectRepository subjectRepository;
+    private final InstituteRepository instituteRepository;
     private final StudentProfileRepository studentProfileRepository;
     private final TeacherProfileRepository teacherProfileRepository;
-    private final TeacherSubjectRepository teacherSubjectRepository;
+    private final AdminProfileRepository adminProfileRepository;
     private final PasswordEncoder passwordEncoder;
+    private final AuditService auditService;
+    private final NotificationService notificationService;
+    private final UniversityScopeService universityScopeService;
 
     @Override
     @Transactional
-    public ApiResponse<?> submitRegistrationRequest(RegistrationRequestDTO request) {
-        // Check if email already exists
+    public void submitRegistration(RegisterRequest request) {
         if (usersRepository.existsByEmail(request.getEmail())) {
-            return ApiResponse.error("Пользователь с таким email уже существует");
+            throw new ConflictException("Пользователь с таким email уже существует");
         }
 
-        // Check if there is a pending registration request with this email
         if (registrationRequestRepository.existsByEmailAndStatus(request.getEmail(), RegistrationStatus.PENDING)) {
-            return ApiResponse.error("Заявка на регистрацию с таким email уже существует и находится на рассмотрении");
+            throw new ConflictException("Заявка с таким email уже находится на рассмотрении");
         }
 
-        // Check if university exists
-        Optional<University> universityOptional = universityRepository.findById(request.getUniversityId());
-        if (universityOptional.isEmpty()) {
-            return ApiResponse.error("Указанный университет не найден");
-        }
+        University university = universityRepository.findById(request.getUniversityId())
+                .orElseThrow(() -> new ResourceNotFoundException("Университет не найден"));
 
-        University university = universityOptional.get();
-        
-        // Validate student-specific fields
+        AcademicGroup group = null;
         if (request.getUserType() == UserType.STUDENT) {
-            if (request.getInstituteId() == null) {
-                return ApiResponse.error("Необходимо указать институт");
-            }
-            if (request.getDirectionId() == null) {
-                return ApiResponse.error("Необходимо указать направление обучения");
-            }
             if (request.getGroupId() == null) {
-                return ApiResponse.error("Необходимо указать группу");
+                throw new BadRequestException("Для студента необходимо указать группу");
             }
-            if (request.getCourseYear() == null || request.getCourseYear() < 1 || request.getCourseYear() > 5) {
-                return ApiResponse.error("Необходимо указать корректный курс обучения (1-5)");
-            }
-
-            // Verify that group exists
-            Optional<AcademicGroup> groupOptional = academicGroupRepository.findById(request.getGroupId());
-            if (groupOptional.isEmpty()) {
-                return ApiResponse.error("Указанная группа не найдена");
-            }
-            
-            // Verify course matches group
-            AcademicGroup group = groupOptional.get();
-            if (!group.getCourse().equals(request.getCourseYear())) {
-                return ApiResponse.error("Выбранная группа не соответствует указанному курсу");
-            }
-            
-            // Verify institute exists
-            Optional<Institute> instituteOptional = instituteRepository.findById(request.getInstituteId());
-            if (instituteOptional.isEmpty()) {
-                return ApiResponse.error("Указанный институт не найден");
-            }
+            group = academicGroupRepository.findById(request.getGroupId())
+                    .orElseThrow(() -> new ResourceNotFoundException("Академическая группа не найдена"));
         }
 
-        // Validate teacher-specific fields
-        Set<Subject> teacherSubjects = new HashSet<>();
+        Institute institute = null;
         if (request.getUserType() == UserType.TEACHER) {
-            if (request.getSubjectIds() == null || request.getSubjectIds().isEmpty()) {
-                return ApiResponse.error("Необходимо указать хотя бы один преподаваемый предмет");
-            }
-            
-            // Check if all subjects exist
-            teacherSubjects = new HashSet<>(subjectRepository.findByIdIn(request.getSubjectIds()));
-            if (teacherSubjects.size() != request.getSubjectIds().size()) {
-                return ApiResponse.error("Один или несколько выбранных предметов не найдены");
-            }
-            
-            // Verify institute exists for teacher
             if (request.getInstituteId() != null) {
-                Optional<Institute> instituteOptional = instituteRepository.findById(request.getInstituteId());
-                if (instituteOptional.isEmpty()) {
-                    return ApiResponse.error("Указанный институт не найден");
-                }
+                institute = instituteRepository.findById(request.getInstituteId())
+                        .orElseThrow(() -> new ResourceNotFoundException("Институт не найден"));
             }
         }
 
-        // Создаем пользователя сразу без запроса на подтверждение
-        Users newUser = Users.builder()
-                .email(request.getEmail())
-                .password(passwordEncoder.encode(request.getPassword()))
-                .firstName(request.getFirstName())
-                .lastName(request.getLastName())
-                .middleName(request.getMiddleName())
-                .userType(request.getUserType())
-                .isActive(true) // Сразу активируем пользователя
-                .build();
-        
-        // Сохраняем пользователя
-        Users savedUser = usersRepository.save(newUser);
-        
-        // Создаем профиль в зависимости от типа пользователя
-        if (request.getUserType() == UserType.STUDENT) {
-            Optional<Institute> instituteOptional = instituteRepository.findById(request.getInstituteId());
-            Optional<AcademicGroup> groupOptional = academicGroupRepository.findById(request.getGroupId());
-            
-            if (instituteOptional.isPresent() && groupOptional.isPresent()) {
-                StudentProfile studentProfile = StudentProfile.builder()
-                        .user(savedUser)
-                        .institute(instituteOptional.get())
-                        .group(groupOptional.get())
-                        .build();
-                
-                studentProfileRepository.save(studentProfile);
-            }
-        } else if (request.getUserType() == UserType.TEACHER) {
-            Optional<Institute> instituteOptional = Optional.empty();
-            if (request.getInstituteId() != null) {
-                instituteOptional = instituteRepository.findById(request.getInstituteId());
-            }
-            
-            TeacherProfile teacherProfile = TeacherProfile.builder()
-                    .user(savedUser)
-                    .build();
-                    
-            if (instituteOptional.isPresent()) {
-                teacherProfile.setInstitute(instituteOptional.get());
-            }
-            
-            TeacherProfile savedTeacherProfile = teacherProfileRepository.save(teacherProfile);
-            
-            // Добавляем предметы преподавателю
-            List<TeacherSubject> teacherSubjectList = teacherSubjects.stream()
-                    .map(subject -> TeacherSubject.builder()
-                            .teacher(savedTeacherProfile)
-                            .subject(subject)
-                            .build())
-                    .collect(Collectors.toList());
-            
-            teacherSubjectRepository.saveAll(teacherSubjectList);
+        if (request.getUserType() == UserType.ADMIN) {
+            throw new BadRequestException("Регистрация администратора через заявку запрещена");
         }
 
-        // Для истории можно все равно сохранить запрос на регистрацию, но сразу с подтвержденным статусом
+        String passwordHash = passwordEncoder.encode(request.getPassword());
+
         RegistrationRequest registrationRequest = RegistrationRequest.builder()
                 .email(request.getEmail())
+                .passwordHash(passwordHash)
                 .firstName(request.getFirstName())
                 .lastName(request.getLastName())
                 .middleName(request.getMiddleName())
-                .university(university)
                 .userType(request.getUserType())
-                .status(RegistrationStatus.APPROVED) // Сразу подтверждаем регистрацию
+                .status(RegistrationStatus.PENDING)
+                .university(university)
+                .group(group)
+                .institute(institute)
                 .build();
-                
-        registrationRequestRepository.save(registrationRequest);
 
-        return ApiResponse.success("Регистрация успешно выполнена. Вы можете войти в систему, используя указанные данные.", null);
+        registrationRequestRepository.save(registrationRequest);
     }
-} 
+
+    @Override
+    @Transactional(readOnly = true)
+    public GuestRegistrationStatusResponse lookupRegistrationStatus(GuestRegistrationLookupRequest request) {
+        Optional<RegistrationRequest> opt =
+                registrationRequestRepository.findFirstByEmailOrderByCreatedAtDesc(request.getEmail());
+        if (opt.isEmpty() || !passwordEncoder.matches(request.getPassword(), opt.get().getPasswordHash())) {
+            throw new BadRequestException("Неверные учётные данные");
+        }
+        RegistrationRequest r = opt.get();
+        return GuestRegistrationStatusResponse.builder()
+                .id(r.getId())
+                .status(r.getStatus())
+                .userType(r.getUserType())
+                .universityId(r.getUniversity() != null ? r.getUniversity().getId() : null)
+                .groupId(r.getGroup() != null ? r.getGroup().getId() : null)
+                .instituteId(r.getInstitute() != null ? r.getInstitute().getId() : null)
+                .rejectionReason(r.getRejectionReason())
+                .createdAt(r.getCreatedAt())
+                .build();
+    }
+
+    @Override
+    @Transactional
+    public void updatePendingRegistration(UpdatePendingRegistrationRequest body) {
+        Optional<RegistrationRequest> opt =
+                registrationRequestRepository.findFirstByEmailOrderByCreatedAtDesc(body.getUpdated().getEmail());
+        if (opt.isEmpty() || !passwordEncoder.matches(body.getCurrentPassword(), opt.get().getPasswordHash())) {
+            throw new BadRequestException("Неверные учётные данные");
+        }
+        RegistrationRequest r = opt.get();
+        if (r.getStatus() != RegistrationStatus.PENDING) {
+            throw new BadRequestException("Редактирование возможно только для заявок в статусе PENDING");
+        }
+        RegisterRequest upd = body.getUpdated();
+        applyRegistrationPayload(r, upd);
+        registrationRequestRepository.save(r);
+    }
+
+    private void applyRegistrationPayload(RegistrationRequest target, RegisterRequest upd) {
+        if (usersRepository.existsByEmail(upd.getEmail()) && !upd.getEmail().equalsIgnoreCase(target.getEmail())) {
+            throw new ConflictException("Пользователь с таким email уже существует");
+        }
+        University university = universityRepository.findById(upd.getUniversityId())
+                .orElseThrow(() -> new ResourceNotFoundException("Университет не найден"));
+
+        AcademicGroup group = null;
+        if (upd.getUserType() == UserType.STUDENT) {
+            if (upd.getGroupId() == null) {
+                throw new BadRequestException("Для студента необходимо указать группу");
+            }
+            group = academicGroupRepository.findById(upd.getGroupId())
+                    .orElseThrow(() -> new ResourceNotFoundException("Академическая группа не найдена"));
+        }
+
+        Institute institute = null;
+        if (upd.getUserType() == UserType.TEACHER && upd.getInstituteId() != null) {
+            institute = instituteRepository.findById(upd.getInstituteId())
+                    .orElseThrow(() -> new ResourceNotFoundException("Институт не найден"));
+        }
+
+        if (upd.getUserType() == UserType.ADMIN) {
+            throw new BadRequestException("Регистрация администратора через заявку запрещена");
+        }
+
+        target.setEmail(upd.getEmail());
+        target.setPasswordHash(passwordEncoder.encode(upd.getPassword()));
+        target.setFirstName(upd.getFirstName());
+        target.setLastName(upd.getLastName());
+        target.setMiddleName(upd.getMiddleName());
+        target.setUserType(upd.getUserType());
+        target.setUniversity(university);
+        target.setGroup(group);
+        target.setInstitute(institute);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<RegistrationRequestResponse> getAllRequests(RegistrationStatus status, UserType userType,
+                                                            Long instituteId, String adminEmail) {
+        Long adminUni = universityScopeService.requireAdminUniversityId(adminEmail);
+        Specification<RegistrationRequest> spec = (root, query, cb) -> {
+            List<Predicate> predicates = new ArrayList<>();
+            if (status != null) {
+                predicates.add(cb.equal(root.get("status"), status));
+            }
+            if (userType != null) {
+                predicates.add(cb.equal(root.get("userType"), userType));
+            }
+            predicates.add(cb.equal(root.get("university").get("id"), adminUni));
+            if (instituteId != null) {
+                predicates.add(cb.equal(root.join("institute").get("id"), instituteId));
+            }
+            if (predicates.isEmpty()) {
+                return cb.conjunction();
+            }
+            return cb.and(predicates.toArray(Predicate[]::new));
+        };
+        return registrationRequestRepository.findAll(spec, Sort.by(Sort.Direction.DESC, "createdAt")).stream()
+                .map(this::mapToResponse)
+                .collect(Collectors.toList());
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public RegistrationRequestResponse getRequestById(Long id, String adminEmail) {
+        Long adminUni = universityScopeService.requireAdminUniversityId(adminEmail);
+        universityScopeService.assertRegistrationRequestInUniversity(id, adminUni);
+        RegistrationRequest request = registrationRequestRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Заявка на регистрацию не найдена"));
+        return mapToResponse(request);
+    }
+
+    @Override
+    @Transactional
+    public void approveRequest(Long id, String adminEmail) {
+        RegistrationRequest request = registrationRequestRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Заявка на регистрацию не найдена"));
+
+        Long adminUni = universityScopeService.requireAdminUniversityId(adminEmail);
+        universityScopeService.assertRegistrationRequestInUniversity(id, adminUni);
+
+        if (request.getStatus() != RegistrationStatus.PENDING) {
+            throw new BadRequestException("Можно одобрить только заявку со статусом PENDING");
+        }
+
+        if (usersRepository.existsByEmail(request.getEmail())) {
+            throw new ConflictException("Пользователь с таким email уже существует");
+        }
+
+        Users user = Users.builder()
+                .email(request.getEmail())
+                .passwordHash(request.getPasswordHash())
+                .firstName(request.getFirstName())
+                .lastName(request.getLastName())
+                .middleName(request.getMiddleName())
+                .userType(request.getUserType())
+                .isActive(true)
+                .build();
+
+        user = usersRepository.save(user);
+
+        createProfileForUser(user, request);
+
+        request.setStatus(RegistrationStatus.APPROVED);
+        registrationRequestRepository.save(request);
+
+        Long adminId = resolveUserId(adminEmail);
+        auditService.log(adminId, "APPROVE_REGISTRATION", "RegistrationRequest", request.getId(),
+                "Заявка одобрена для " + request.getEmail());
+        notificationService.notifyRegistrationApproved(request.getEmail());
+    }
+
+    @Override
+    @Transactional
+    public void rejectRequest(Long id, ApproveRejectRequest rejectBody, String adminEmail) {
+        RegistrationRequest request = registrationRequestRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Заявка на регистрацию не найдена"));
+
+        Long adminUni = universityScopeService.requireAdminUniversityId(adminEmail);
+        universityScopeService.assertRegistrationRequestInUniversity(id, adminUni);
+
+        if (request.getStatus() != RegistrationStatus.PENDING) {
+            throw new BadRequestException("Можно отклонить только заявку со статусом PENDING");
+        }
+
+        request.setStatus(RegistrationStatus.REJECTED);
+        request.setRejectionReason(rejectBody.getRejectionReason());
+        registrationRequestRepository.save(request);
+
+        Long adminId = resolveUserId(adminEmail);
+        auditService.log(adminId, "REJECT_REGISTRATION", "RegistrationRequest", request.getId(),
+                "Заявка отклонена для " + request.getEmail() + ": " + rejectBody.getRejectionReason());
+        notificationService.notifyRegistrationRejected(request.getEmail(), rejectBody.getRejectionReason());
+    }
+
+    private void createProfileForUser(Users user, RegistrationRequest request) {
+        switch (request.getUserType()) {
+            case STUDENT -> {
+                Institute institute = request.getGroup().getDirection().getInstitute();
+                StudentProfile studentProfile = StudentProfile.builder()
+                        .user(user)
+                        .group(request.getGroup())
+                        .institute(institute)
+                        .build();
+                studentProfileRepository.save(studentProfile);
+            }
+            case TEACHER -> {
+                TeacherProfile teacherProfile = TeacherProfile.builder()
+                        .user(user)
+                        .institute(request.getInstitute())
+                        .build();
+                teacherProfileRepository.save(teacherProfile);
+            }
+            case ADMIN -> {
+                AdminProfile adminProfile = AdminProfile.builder()
+                        .user(user)
+                        .university(request.getUniversity())
+                        .role("ADMIN")
+                        .build();
+                adminProfileRepository.save(adminProfile);
+            }
+        }
+    }
+
+    private Long resolveUserId(String email) {
+        if (email == null) return null;
+        return usersRepository.findByEmail(email).map(Users::getId).orElse(null);
+    }
+
+    private RegistrationRequestResponse mapToResponse(RegistrationRequest request) {
+        return RegistrationRequestResponse.builder()
+                .id(request.getId())
+                .email(request.getEmail())
+                .firstName(request.getFirstName())
+                .lastName(request.getLastName())
+                .middleName(request.getMiddleName())
+                .userType(request.getUserType())
+                .status(request.getStatus())
+                .rejectionReason(request.getRejectionReason())
+                .universityId(request.getUniversity() != null ? request.getUniversity().getId() : null)
+                .universityName(request.getUniversity() != null ? request.getUniversity().getName() : null)
+                .groupId(request.getGroup() != null ? request.getGroup().getId() : null)
+                .groupName(request.getGroup() != null ? request.getGroup().getName() : null)
+                .instituteId(request.getInstitute() != null ? request.getInstitute().getId() : null)
+                .instituteName(request.getInstitute() != null ? request.getInstitute().getName() : null)
+                .createdAt(request.getCreatedAt())
+                .build();
+    }
+}
