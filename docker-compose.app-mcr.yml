@@ -1,0 +1,8 @@
+# Подключать вместе с основным файлом, если недоступен Docker Hub для образа gradle/eclipse-temurin:
+#   gradlew.bat bootJar
+#   docker compose -f docker-compose.yml -f docker-compose.app-mcr.yml build app
+#   docker compose -f docker-compose.yml -f docker-compose.app-mcr.yml up -d
+services:
+  app:
+    build:
+      dockerfile: Dockerfile.mcr

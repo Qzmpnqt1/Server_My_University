@@ -28,24 +28,45 @@ public class CassandraConfig {
     @Value("${spring.cassandra.keyspace-name:my_university}")
     private String keyspaceName;
 
+    /** Повторы при старте: Cassandra / init keyspace иногда ещё не готовы, иначе сессия остаётся null до рестарта приложения. */
+    @Value("${app.cassandra.connect-max-attempts:40}")
+    private int connectMaxAttempts;
+
+    @Value("${app.cassandra.connect-delay-ms:2000}")
+    private long connectDelayMs;
+
     @Bean
     public CqlSession cqlSession() {
-        try {
-            log.info("Connecting to Cassandra at {}:{}, datacenter={}, keyspace={}",
-                    contactPoints, port, localDatacenter, keyspaceName);
+        log.info("Connecting to Cassandra at {}:{}, datacenter={}, keyspace={} (max {} attempts, delay {} ms)",
+                contactPoints, port, localDatacenter, keyspaceName, connectMaxAttempts, connectDelayMs);
 
-            CqlSession session = CqlSession.builder()
-                    .addContactPoint(new InetSocketAddress(contactPoints, port))
-                    .withLocalDatacenter(localDatacenter)
-                    .withKeyspace(keyspaceName)
-                    .build();
-
-            log.info("Successfully connected to Cassandra");
-            return session;
-        } catch (Exception e) {
-            log.warn("Failed to connect to Cassandra: {}. Chat features will be unavailable until Cassandra is reachable.",
-                    e.getMessage());
-            return null;
+        Exception last = null;
+        for (int attempt = 1; attempt <= connectMaxAttempts; attempt++) {
+            try {
+                CqlSession session = CqlSession.builder()
+                        .addContactPoint(new InetSocketAddress(contactPoints, port))
+                        .withLocalDatacenter(localDatacenter)
+                        .withKeyspace(keyspaceName)
+                        .build();
+                log.info("Successfully connected to Cassandra (attempt {}/{})", attempt, connectMaxAttempts);
+                return session;
+            } catch (Exception e) {
+                last = e;
+                log.warn("Cassandra not ready yet (attempt {}/{}): {} — {}",
+                        attempt, connectMaxAttempts, e.getClass().getSimpleName(), e.getMessage());
+                if (attempt < connectMaxAttempts) {
+                    try {
+                        Thread.sleep(connectDelayMs);
+                    } catch (InterruptedException ie) {
+                        Thread.currentThread().interrupt();
+                        log.warn("Cassandra connect retry interrupted");
+                        break;
+                    }
+                }
+            }
         }
+        log.warn("Failed to connect to Cassandra after {} attempts. Chat will stay disabled until the app is restarted. Last error: {}",
+                connectMaxAttempts, last != null ? last.getMessage() : "unknown");
+        return null;
     }
 }

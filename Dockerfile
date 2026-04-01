@@ -1,3 +1,5 @@
+# Стадия сборки: образы с docker.io (gradle, eclipse-temurin). При TLS timeout к Hub см. Dockerfile.mcr + docker-compose.app-mcr.yml
+# (сборка JAR локально: gradlew bootJar, рантайм с mcr.microsoft.com/openjdk).
 # Стадия сборки: официальный образ уже содержит Gradle — не качаем gradle-8.10-bin.zip
 # (внутри Docker часто таймаут к services.gradle.org).
 FROM gradle:8.10-jdk17 AS builder
@@ -13,5 +15,5 @@ RUN gradle bootJar --no-daemon --no-build-cache
 FROM eclipse-temurin:17-jre-alpine
 WORKDIR /app
 COPY --from=builder /app/build/libs/*.jar app.jar
-EXPOSE 8080
+EXPOSE 8443
 ENTRYPOINT ["java", "-jar", "app.jar"]

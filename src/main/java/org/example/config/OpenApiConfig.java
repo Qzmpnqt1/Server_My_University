@@ -8,6 +8,7 @@ import io.swagger.v3.oas.models.info.License;
 import io.swagger.v3.oas.models.security.SecurityRequirement;
 import io.swagger.v3.oas.models.security.SecurityScheme;
 import io.swagger.v3.oas.models.servers.Server;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
@@ -19,10 +20,12 @@ public class OpenApiConfig {
     private static final String SECURITY_SCHEME_NAME = "bearerAuth";
 
     @Bean
-    public OpenAPI myOpenAPI() {
+    public OpenAPI myOpenAPI(
+            @Value("${app.openapi.server-url}") String serverUrl
+    ) {
         Server devServer = new Server();
-        devServer.setUrl("http://localhost:8080");
-        devServer.setDescription("Server URL for Development environment");
+        devServer.setUrl(serverUrl);
+        devServer.setDescription("HTTPS API (no cleartext HTTP)");
 
         Contact contact = new Contact();
         contact.setName("My University");

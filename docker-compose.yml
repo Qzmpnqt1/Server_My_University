@@ -62,7 +62,7 @@ services:
       dockerfile: Dockerfile
     container_name: my_university_app
     ports:
-      - "8080:8080"
+      - "${APP_HTTPS_HOST_PORT:-8443}:8443"
     depends_on:
       mysql:
         condition: service_healthy
@@ -71,6 +71,8 @@ services:
     environment:
       # Профиль docker: см. application-docker.properties (Flyway checksum после правок V15 и т.п.)
       SPRING_PROFILES_ACTIVE: docker
+      SERVER_PORT: "8443"
+      APP_OPENAPI_SERVER_URL: "https://localhost:8443"
       SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/my_university?createDatabaseIfNotExist=true&useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC&useUnicode=true&characterEncoding=UTF-8&connectionCollation=utf8mb4_unicode_ci
       SPRING_DATASOURCE_USERNAME: root
       SPRING_DATASOURCE_PASSWORD: root

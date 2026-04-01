@@ -20,7 +20,7 @@ REST API backend for the **My University** platform — a university management 
 
 ```
 ┌──────────────┐      ┌──────────────────────────────────────────┐
-│  Mobile App  │─────▶│           Spring Boot API (:8080)        │
+│  Mobile App  │─────▶│           Spring Boot API (HTTPS :8443)   │
 │  (Android)   │      │                                          │
 └──────────────┘      │  Controller → Service → Repository       │
                       │                                          │
@@ -68,7 +68,9 @@ docker compose up -d --build
 docker compose logs -f app
 ```
 
-The first start takes 2–3 minutes (Cassandra health-check + Flyway migrations). Once you see `Started ServerMyUniversityApplication`, the API is ready at **http://localhost:8080**.
+The first start takes 2–3 minutes (Cassandra health-check + Flyway migrations). Once you see `Started ServerMyUniversityApplication`, the API is ready at **https://localhost:8443** (TLS with the bundled dev keystore; use `curl -k` for self-signed).
+
+**TLS:** the public API is **HTTPS-only** (embedded Tomcat, default port **8443**). The repo includes `dev-keystore.p12` for local/dev use (password override: `SSL_KEYSTORE_PASSWORD`). For production, replace the keystore or terminate TLS at a reverse proxy. JDBC URLs to MySQL/Cassandra remain separate (not the mobile API surface).
 
 To stop:
 
@@ -117,11 +119,11 @@ The app connects to `localhost:3307` (MySQL from Docker Compose on the host; avo
 
 Once the server is running, Swagger UI is available at:
 
-**http://localhost:8080/swagger-ui.html**
+**https://localhost:8443/swagger-ui/index.html**
 
 The raw OpenAPI spec is at:
 
-**http://localhost:8080/v3/api-docs**
+**https://localhost:8443/v3/api-docs**
 
 All protected endpoints require a `Bearer <JWT>` token. Use the **Authorize** button in Swagger UI to set it after logging in.
 
@@ -135,7 +137,7 @@ All protected endpoints require a `Bearer <JWT>` token. Use the **Authorize** bu
 Obtain a JWT token via:
 
 ```bash
-curl -X POST http://localhost:8080/api/v1/auth/login \
+curl -k -X POST https://localhost:8443/api/v1/auth/login \
   -H "Content-Type: application/json" \
   -d '{"email":"admin@university.ru","password":"Admin123!"}'
 ```
