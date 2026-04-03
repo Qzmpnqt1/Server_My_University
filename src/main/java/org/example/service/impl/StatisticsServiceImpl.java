@@ -8,6 +8,7 @@ import org.example.model.*;
 import org.example.repository.*;
 import org.example.service.StatisticsService;
 import org.example.service.UniversityScopeService;
+import org.example.util.StatisticsFinalAssessmentUtil;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -32,12 +33,14 @@ public class StatisticsServiceImpl implements StatisticsService {
     private final UniversityRepository universityRepository;
     private final UsersRepository usersRepository;
     private final UniversityScopeService universityScopeService;
+    private final TeacherProfileRepository teacherProfileRepository;
+    private final TeacherSubjectRepository teacherSubjectRepository;
 
     @Override
     public SubjectStatisticsResponse getSubjectStatistics(Long subjectDirectionId, String viewerEmail) {
-        ensureAdminSubjectDirection(subjectDirectionId, viewerEmail);
         SubjectInDirection sid = subjectInDirectionRepository.findById(subjectDirectionId)
                 .orElseThrow(() -> new ResourceNotFoundException("Предмет в направлении не найден"));
+        ensureSubjectDirectionAccess(sid, viewerEmail);
 
         FinalAssessmentType atype = sid.getFinalAssessmentType() != null
                 ? sid.getFinalAssessmentType()
@@ -92,9 +95,9 @@ public class StatisticsServiceImpl implements StatisticsService {
 
     @Override
     public PracticeStatisticsResponse getPracticeStatistics(Long subjectDirectionId, String viewerEmail) {
-        ensureAdminSubjectDirection(subjectDirectionId, viewerEmail);
         SubjectInDirection sid = subjectInDirectionRepository.findById(subjectDirectionId)
                 .orElseThrow(() -> new ResourceNotFoundException("Предмет в направлении не найден"));
+        ensureSubjectDirectionAccess(sid, viewerEmail);
 
         List<SubjectPractice> practices = subjectPracticeRepository.findBySubjectDirectionId(subjectDirectionId);
 
@@ -103,6 +106,8 @@ public class StatisticsServiceImpl implements StatisticsService {
         double scoreSum = 0.0;
         int scoreCount = 0;
 
+        List<Double> practiceReferenceAverages = new ArrayList<>();
+
         for (SubjectPractice p : practices) {
             List<PracticeGrade> pgs = practiceGradeRepository.findByPracticeId(p.getId());
             int total = pgs.size();
@@ -110,6 +115,7 @@ public class StatisticsServiceImpl implements StatisticsService {
             int withResult;
             List<Integer> nums;
             Double creditRateVal = null;
+            Double normalizedAvg = null;
             if (creditPractice) {
                 withResult = (int) pgs.stream().filter(pg -> pg.getCreditStatus() != null).count();
                 nums = Collections.emptyList();
@@ -125,6 +131,12 @@ public class StatisticsServiceImpl implements StatisticsService {
                         .filter(Objects::nonNull)
                         .filter(g -> g >= 2 && g <= 5)
                         .collect(Collectors.toList());
+                if (!nums.isEmpty()) {
+                    double rawAvg = average(nums);
+                    Double toFive = StatisticsFinalAssessmentUtil.normalizedAverageToFivePoint(rawAvg, p.getMaxGrade());
+                    normalizedAvg = toFive != null ? round(toFive) : null;
+                    practiceReferenceAverages.add(toFive != null ? toFive : rawAvg);
+                }
             }
 
             details.add(PracticeStatisticsResponse.PracticeDetail.builder()
@@ -134,9 +146,9 @@ public class StatisticsServiceImpl implements StatisticsService {
                     .totalRecords(total)
                     .withResult(withResult)
                     .completionRate(round(total > 0 ? (double) withResult / total * 100.0 : 0.0))
-                    .averageGrade(creditPractice ? 0.0 : round(average(nums)))
+                    .averageGrade(creditPractice ? 0.0 : round(nums.isEmpty() ? 0.0 : average(nums)))
                     .creditRate(creditRateVal)
-                    .normalizedAverage(null)
+                    .normalizedAverage(normalizedAvg)
                     .build());
 
             totalWith += withResult;
@@ -149,11 +161,15 @@ public class StatisticsServiceImpl implements StatisticsService {
 
         double progress = totalExpected > 0 ? (double) totalWith / totalExpected * 100.0 : 0.0;
 
+        double totalScoreAvg = practiceReferenceAverages.isEmpty()
+                ? (scoreCount > 0 ? scoreSum / scoreCount : 0.0)
+                : practiceReferenceAverages.stream().mapToDouble(Double::doubleValue).average().orElse(0.0);
+
         return PracticeStatisticsResponse.builder()
                 .subjectDirectionId(subjectDirectionId)
                 .subjectName(sid.getSubject().getName())
                 .overallProgress(round(progress))
-                .totalScoreAverage(round(scoreCount > 0 ? scoreSum / scoreCount : 0.0))
+                .totalScoreAverage(round(totalScoreAvg))
                 .completionPercentage(round(progress))
                 .totalPractices(practices.size())
                 .countedValues(totalExpected)
@@ -164,9 +180,9 @@ public class StatisticsServiceImpl implements StatisticsService {
 
     @Override
     public GroupStatisticsResponse getGroupStatistics(Long groupId, String viewerEmail) {
-        ensureAdminGroup(groupId, viewerEmail);
         AcademicGroup group = academicGroupRepository.findById(groupId)
                 .orElseThrow(() -> new ResourceNotFoundException("Группа не найдена"));
+        ensureGroupAccess(group, viewerEmail);
 
         List<StudentProfile> profiles = studentProfileRepository.findByGroupId(groupId);
         List<SubjectInDirection> sids = subjectInDirectionRepository.findByDirectionId(group.getDirection().getId());
@@ -174,6 +190,8 @@ public class StatisticsServiceImpl implements StatisticsService {
 
         List<Integer> allGrades = new ArrayList<>();
         int withDebt = 0;
+        int filledFinalCells = 0;
+        long totalFinalCells = (long) profiles.size() * sids.size();
         Map<String, List<Integer>> examGradesBySubject = new LinkedHashMap<>();
         Map<String, List<Boolean>> creditResultsBySubject = new LinkedHashMap<>();
         for (SubjectInDirection s : sids) {
@@ -192,29 +210,25 @@ public class StatisticsServiceImpl implements StatisticsService {
             for (SubjectInDirection s : sids) {
                 Grade g = gm.get(s.getId());
                 String key = s.getSubject().getName() + " (сем " + s.getSemester() + ")";
-                FinalAssessmentType at = s.getFinalAssessmentType() != null
-                        ? s.getFinalAssessmentType()
-                        : FinalAssessmentType.EXAM;
-                if (g == null) {
+                FinalAssessmentType at = StatisticsFinalAssessmentUtil.effectiveType(s);
+                if (StatisticsFinalAssessmentUtil.isFinalComplete(g, at)) {
+                    filledFinalCells++;
+                }
+                if (StatisticsFinalAssessmentUtil.isDebtForSubject(g, at)) {
                     debt = true;
-                } else if (at == FinalAssessmentType.CREDIT) {
-                    if (g.getCreditStatus() == null) {
-                        debt = true;
-                    } else {
-                        creditResultsBySubject.get(key).add(g.getCreditStatus());
-                        if (!g.getCreditStatus()) debt = true;
-                    }
-                } else {
-                    if (g.getGrade() == null || g.getGrade() < 2 || g.getGrade() > 5) {
-                        debt = true;
-                    } else {
-                        allGrades.add(g.getGrade());
-                        examGradesBySubject.get(key).add(g.getGrade());
-                        if (g.getGrade() <= 2) debt = true;
-                    }
+                }
+                if (g != null && at == FinalAssessmentType.EXAM
+                        && g.getGrade() != null && g.getGrade() >= 2 && g.getGrade() <= 5) {
+                    allGrades.add(g.getGrade());
+                    examGradesBySubject.get(key).add(g.getGrade());
+                }
+                if (g != null && at == FinalAssessmentType.CREDIT && g.getCreditStatus() != null) {
+                    creditResultsBySubject.get(key).add(g.getCreditStatus());
                 }
             }
-            if (debt) withDebt++;
+            if (debt) {
+                withDebt++;
+            }
         }
 
         Map<String, Double> avgBySubject = new LinkedHashMap<>();
@@ -238,8 +252,8 @@ public class StatisticsServiceImpl implements StatisticsService {
                 .debtRate(round(profiles.isEmpty() ? 0.0 : (double) withDebt / profiles.size() * 100.0))
                 .studentCount(profiles.size())
                 .studentsWithDebt(withDebt)
-                .countedValues(allGrades.size())
-                .missingValues((long) profiles.size() * sids.size() - allGrades.size())
+                .countedValues(filledFinalCells)
+                .missingValues(Math.max(0L, totalFinalCells - filledFinalCells))
                 .averageBySubject(avgBySubject)
                 .creditPassPercentBySubject(creditPassBySubject)
                 .build();
@@ -247,9 +261,9 @@ public class StatisticsServiceImpl implements StatisticsService {
 
     @Override
     public DirectionStatisticsResponse getDirectionStatistics(Long directionId, String viewerEmail) {
-        ensureAdminDirection(directionId, viewerEmail);
         StudyDirection dir = studyDirectionRepository.findById(directionId)
                 .orElseThrow(() -> new ResourceNotFoundException("Направление не найдено"));
+        ensureDirectionAccess(dir, viewerEmail);
 
         List<AcademicGroup> groups = academicGroupRepository.findByDirectionId(directionId);
         List<DirectionStatisticsResponse.GroupSummary> summaries = new ArrayList<>();
@@ -356,6 +370,11 @@ public class StatisticsServiceImpl implements StatisticsService {
 
     @Override
     public ScheduleStatisticsResponse getTeacherScheduleStatistics(Long teacherId, String viewerEmail) {
+        Users viewer = usersRepository.findByEmail(viewerEmail)
+                .orElseThrow(() -> new AccessDeniedException("Пользователь не найден"));
+        if (viewer.getUserType() == UserType.TEACHER && !viewer.getId().equals(teacherId)) {
+            throw new AccessDeniedException("Доступна только статистика по собственному расписанию");
+        }
         ensureAdminTeacher(teacherId, viewerEmail);
         usersRepository.findById(teacherId)
                 .orElseThrow(() -> new ResourceNotFoundException("Преподаватель не найден"));
@@ -364,14 +383,19 @@ public class StatisticsServiceImpl implements StatisticsService {
 
     @Override
     public ScheduleStatisticsResponse getGroupScheduleStatistics(Long groupId, String viewerEmail) {
-        ensureAdminGroup(groupId, viewerEmail);
-        academicGroupRepository.findById(groupId)
+        AcademicGroup group = academicGroupRepository.findById(groupId)
                 .orElseThrow(() -> new ResourceNotFoundException("Группа не найдена"));
+        ensureGroupAccess(group, viewerEmail);
         return buildScheduleStats("group", groupId, scheduleRepository.findByGroupId(groupId));
     }
 
     @Override
     public ScheduleStatisticsResponse getClassroomScheduleStatistics(Long classroomId, String viewerEmail) {
+        Users viewer = usersRepository.findByEmail(viewerEmail)
+                .orElseThrow(() -> new AccessDeniedException("Пользователь не найден"));
+        if (viewer.getUserType() == UserType.TEACHER) {
+            throw new AccessDeniedException("Сводка по аудиториям доступна только администратору");
+        }
         ensureAdminClassroom(classroomId, viewerEmail);
         return buildScheduleStats("classroom", classroomId,
                 scheduleRepository.findByClassroomId(classroomId));
@@ -457,6 +481,8 @@ public class StatisticsServiceImpl implements StatisticsService {
                         }
                         return pg.getGrade() != null && pg.getGrade() >= 2 && pg.getGrade() <= 5;
                     })
+                    .map(pg -> pg.getPractice().getId())
+                    .distinct()
                     .count();
         }
 
@@ -485,16 +511,17 @@ public class StatisticsServiceImpl implements StatisticsService {
         List<StudentProfile> profiles = studentProfileRepository.findByGroupId(groupId);
         List<SubjectInDirection> sids = subjectInDirectionRepository.findByDirectionId(group.getDirection().getId());
         List<Long> sidIds = sids.stream().map(SubjectInDirection::getId).collect(Collectors.toList());
-        Map<Long, FinalAssessmentType> typeBySid = sids.stream().collect(Collectors.toMap(
-                SubjectInDirection::getId,
-                s -> s.getFinalAssessmentType() != null ? s.getFinalAssessmentType() : FinalAssessmentType.EXAM,
-                (a, b) -> a));
+        Map<Long, SubjectInDirection> sidEntity = sids.stream()
+                .collect(Collectors.toMap(SubjectInDirection::getId, s -> s, (a, b) -> a));
 
         for (StudentProfile sp : profiles) {
             List<Grade> grades = sidIds.isEmpty() ? List.of()
                     : gradeRepository.findByStudentIdAndSubjectDirectionIdIn(sp.getUser().getId(), sidIds);
             for (Grade g : grades) {
-                FinalAssessmentType at = typeBySid.getOrDefault(g.getSubjectDirection().getId(), FinalAssessmentType.EXAM);
+                SubjectInDirection sd = sidEntity.get(g.getSubjectDirection().getId());
+                FinalAssessmentType at = sd != null
+                        ? StatisticsFinalAssessmentUtil.effectiveType(sd)
+                        : FinalAssessmentType.EXAM;
                 if (at == FinalAssessmentType.EXAM && g.getGrade() != null && g.getGrade() >= 2 && g.getGrade() <= 5) {
                     target.add(g.getGrade());
                 }
@@ -502,31 +529,55 @@ public class StatisticsServiceImpl implements StatisticsService {
         }
     }
 
-    private void ensureAdminSubjectDirection(Long subjectDirectionId, String viewerEmail) {
-        usersRepository.findByEmail(viewerEmail).ifPresent(u -> {
-            if (u.getUserType() == UserType.ADMIN) {
-                Long uni = universityScopeService.requireAdminUniversityId(viewerEmail);
-                universityScopeService.assertSubjectDirectionInUniversity(subjectDirectionId, uni);
+    private void ensureSubjectDirectionAccess(SubjectInDirection sid, String viewerEmail) {
+        Users u = usersRepository.findByEmail(viewerEmail)
+                .orElseThrow(() -> new AccessDeniedException("Пользователь не найден"));
+        if (u.getUserType() == UserType.ADMIN) {
+            Long uni = universityScopeService.requireAdminUniversityId(viewerEmail);
+            universityScopeService.assertSubjectDirectionInUniversity(sid.getId(), uni);
+        } else if (u.getUserType() == UserType.TEACHER) {
+            TeacherProfile tp = teacherProfileRepository.findByUserId(u.getId())
+                    .orElseThrow(() -> new AccessDeniedException("Профиль преподавателя не найден"));
+            if (!teacherSubjectRepository.teacherTeachesInDirection(tp.getId(), sid.getDirection().getId())) {
+                throw new AccessDeniedException("Нет доступа к статистике по этой дисциплине");
             }
-        });
+        } else {
+            throw new AccessDeniedException("Недостаточно прав");
+        }
     }
 
-    private void ensureAdminGroup(Long groupId, String viewerEmail) {
-        usersRepository.findByEmail(viewerEmail).ifPresent(u -> {
-            if (u.getUserType() == UserType.ADMIN) {
-                Long uni = universityScopeService.requireAdminUniversityId(viewerEmail);
-                universityScopeService.assertAcademicGroupInUniversity(groupId, uni);
+    private void ensureGroupAccess(AcademicGroup group, String viewerEmail) {
+        Users u = usersRepository.findByEmail(viewerEmail)
+                .orElseThrow(() -> new AccessDeniedException("Пользователь не найден"));
+        if (u.getUserType() == UserType.ADMIN) {
+            Long uni = universityScopeService.requireAdminUniversityId(viewerEmail);
+            universityScopeService.assertAcademicGroupInUniversity(group.getId(), uni);
+        } else if (u.getUserType() == UserType.TEACHER) {
+            TeacherProfile tp = teacherProfileRepository.findByUserId(u.getId())
+                    .orElseThrow(() -> new AccessDeniedException("Профиль преподавателя не найден"));
+            if (!teacherSubjectRepository.teacherTeachesInDirection(tp.getId(), group.getDirection().getId())) {
+                throw new AccessDeniedException("Нет доступа к статистике этой группы");
             }
-        });
+        } else {
+            throw new AccessDeniedException("Недостаточно прав");
+        }
     }
 
-    private void ensureAdminDirection(Long directionId, String viewerEmail) {
-        usersRepository.findByEmail(viewerEmail).ifPresent(u -> {
-            if (u.getUserType() == UserType.ADMIN) {
-                Long uni = universityScopeService.requireAdminUniversityId(viewerEmail);
-                universityScopeService.assertStudyDirectionInUniversity(directionId, uni);
+    private void ensureDirectionAccess(StudyDirection dir, String viewerEmail) {
+        Users u = usersRepository.findByEmail(viewerEmail)
+                .orElseThrow(() -> new AccessDeniedException("Пользователь не найден"));
+        if (u.getUserType() == UserType.ADMIN) {
+            Long uni = universityScopeService.requireAdminUniversityId(viewerEmail);
+            universityScopeService.assertStudyDirectionInUniversity(dir.getId(), uni);
+        } else if (u.getUserType() == UserType.TEACHER) {
+            TeacherProfile tp = teacherProfileRepository.findByUserId(u.getId())
+                    .orElseThrow(() -> new AccessDeniedException("Профиль преподавателя не найден"));
+            if (!teacherSubjectRepository.teacherTeachesInDirection(tp.getId(), dir.getId())) {
+                throw new AccessDeniedException("Нет доступа к статистике этого направления");
             }
-        });
+        } else {
+            throw new AccessDeniedException("Недостаточно прав");
+        }
     }
 
     private void ensureAdminInstitute(Long instituteId, String viewerEmail) {
@@ -567,7 +618,12 @@ public class StatisticsServiceImpl implements StatisticsService {
 
     private ScheduleStatisticsResponse buildScheduleStats(String scope, Long entityId, List<Schedule> schedules) {
         double totalHours = schedules.stream()
-                .mapToDouble(s -> Duration.between(s.getStartTime(), s.getEndTime()).toMinutes() / 60.0).sum();
+                .mapToDouble(s -> {
+                    Duration d = Duration.between(s.getStartTime(), s.getEndTime());
+                    long minutes = d.isNegative() ? 0L : d.toMinutes();
+                    return minutes / 60.0;
+                })
+                .sum();
 
         return ScheduleStatisticsResponse.builder()
                 .scope(scope)
