@@ -21,4 +21,7 @@ public class PracticeGradeRequest {
     private Integer grade;
 
     private Boolean creditStatus;
+
+    /** Если задано — студент должен состоять в этой группе. */
+    private Long groupId;
 }

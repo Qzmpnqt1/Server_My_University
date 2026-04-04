@@ -2,7 +2,10 @@ package org.example.controller;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.example.config.SecurityConfig;
+import org.example.dto.request.ScheduleCompareRequest;
 import org.example.dto.request.ScheduleRequest;
+import org.example.dto.response.ScheduleCompareInstituteOptionResponse;
+import org.example.dto.response.ScheduleCompareResultResponse;
 import org.example.dto.response.ScheduleResponse;
 import org.example.exception.ConflictException;
 import org.example.exception.GlobalExceptionHandler;
@@ -10,10 +13,13 @@ import org.example.exception.ResourceNotFoundException;
 import org.example.model.LessonType;
 import org.example.service.JwtService;
 import org.example.service.ScheduleAuthorizationService;
+import org.example.service.ScheduleCompareService;
 import org.example.service.ScheduleService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
@@ -39,6 +45,7 @@ class ScheduleControllerTest {
     @Autowired private MockMvc mockMvc;
     @Autowired private ObjectMapper objectMapper;
     @MockBean private ScheduleService scheduleService;
+    @MockBean private ScheduleCompareService scheduleCompareService;
     @MockBean private JwtService jwtService;
     @MockBean private UserDetailsService userDetailsService;
     @MockBean private ScheduleAuthorizationService scheduleAuthorizationService;
@@ -49,6 +56,7 @@ class ScheduleControllerTest {
         lenient().doNothing().when(scheduleAuthorizationService).ensureCanViewGroupSchedule(anyString(), anyLong());
         lenient().doNothing().when(scheduleAuthorizationService).ensureCanViewTeacherSchedule(anyString(), anyLong());
         lenient().doNothing().when(scheduleAuthorizationService).ensureCanViewScheduleEntry(anyString(), anyLong());
+        lenient().doNothing().when(scheduleAuthorizationService).ensureCanViewClassroomSchedule(anyString(), anyLong());
     }
 
     private void mockAdminAuth() {
@@ -191,6 +199,80 @@ class ScheduleControllerTest {
                         .header("Authorization", "Bearer teacher-token"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$[0].teacherName").value("Попов Алексей"));
+    }
+
+    @Test
+    @DisplayName("GET /api/v1/schedule/classroom/{id} — student")
+    void getByClassroom_Student_200() throws Exception {
+        mockStudentAuth();
+        when(scheduleService.getByClassroom(eq(5L), eq(1), isNull())).thenReturn(List.of(sampleResponse()));
+
+        mockMvc.perform(get("/api/v1/schedule/classroom/5")
+                        .param("weekNumber", "1")
+                        .header("Authorization", "Bearer student-token"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].subjectName").value("Математика"));
+
+        verify(scheduleAuthorizationService).ensureCanViewClassroomSchedule("student@uni.ru", 5L);
+        verify(scheduleService).getByClassroom(5L, 1, null);
+    }
+
+    @Test
+    @DisplayName("POST /api/v1/schedule/compare — student")
+    void compareSchedule_Student_200() throws Exception {
+        mockStudentAuth();
+        ScheduleCompareResultResponse result = ScheduleCompareResultResponse.builder()
+                .weekNumber(1)
+                .leftLabel("Группа «ИТ-201»")
+                .rightLabel("Аудитория: А, ауд. 1")
+                .segmentsBothSidesBusy(0)
+                .segmentsOnlyLeft(1)
+                .segmentsOnlyRight(0)
+                .days(List.of())
+                .build();
+        when(scheduleCompareService.compare(any(ScheduleCompareRequest.class), eq("student@uni.ru")))
+                .thenReturn(result);
+
+        String body = """
+                {"mode":"MY_WITH_OTHER","rightKind":"CLASSROOM","rightId":3,"weekNumber":1}
+                """;
+
+        mockMvc.perform(post("/api/v1/schedule/compare")
+                        .header("Authorization", "Bearer student-token")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(body))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.weekNumber").value(1))
+                .andExpect(jsonPath("$.leftLabel").value("Группа «ИТ-201»"));
+    }
+
+    @Test
+    @DisplayName("GET /api/v1/schedule/compare/institutes — teacher")
+    void compareInstitutes_Teacher_200() throws Exception {
+        mockTeacherAuth();
+        when(scheduleCompareService.listInstitutes("teacher@uni.ru"))
+                .thenReturn(List.of(ScheduleCompareInstituteOptionResponse.builder()
+                        .id(1L)
+                        .name("Институт информационных технологий")
+                        .shortName("ИИТ")
+                        .build()));
+
+        mockMvc.perform(get("/api/v1/schedule/compare/institutes")
+                        .header("Authorization", "Bearer teacher-token"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].name").value("Институт информационных технологий"));
+    }
+
+    @Test
+    @DisplayName("GET /api/v1/schedule/compare — не должен отдавать запись расписания как по id")
+    void comparePath_NoAccidentalGetById() throws Exception {
+        mockStudentAuth();
+        int status = mockMvc.perform(get("/api/v1/schedule/compare")
+                        .header("Authorization", "Bearer student-token"))
+                .andReturn()
+                .getResponse()
+                .getStatus();
+        assertNotEquals(200, status);
     }
 
     @Test

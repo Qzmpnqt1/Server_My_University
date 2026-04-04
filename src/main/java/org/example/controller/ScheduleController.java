@@ -2,9 +2,11 @@ package org.example.controller;
 
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.example.dto.request.ScheduleCompareRequest;
 import org.example.dto.request.ScheduleRequest;
-import org.example.dto.response.ScheduleResponse;
+import org.example.dto.response.*;
 import org.example.service.ScheduleAuthorizationService;
+import org.example.service.ScheduleCompareService;
 import org.example.service.ScheduleService;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -21,6 +23,7 @@ public class ScheduleController {
 
     private final ScheduleService scheduleService;
     private final ScheduleAuthorizationService scheduleAuthorizationService;
+    private final ScheduleCompareService scheduleCompareService;
 
     @GetMapping
     @PreAuthorize("isAuthenticated()")
@@ -82,6 +85,66 @@ public class ScheduleController {
             Principal principal) {
         scheduleAuthorizationService.ensureCanViewTeacherSchedule(principal.getName(), teacherId);
         return ResponseEntity.ok(scheduleService.getByTeacher(teacherId, weekNumber, dayOfWeek));
+    }
+
+    @GetMapping("/classroom/{classroomId}")
+    @PreAuthorize("hasAnyRole('STUDENT','TEACHER','ADMIN')")
+    public ResponseEntity<List<ScheduleResponse>> getByClassroom(
+            @PathVariable Long classroomId,
+            @RequestParam(required = false) Integer weekNumber,
+            @RequestParam(required = false) Integer dayOfWeek,
+            Principal principal) {
+        scheduleAuthorizationService.ensureCanViewClassroomSchedule(principal.getName(), classroomId);
+        return ResponseEntity.ok(scheduleService.getByClassroom(classroomId, weekNumber, dayOfWeek));
+    }
+
+    @PostMapping("/compare")
+    @PreAuthorize("hasAnyRole('STUDENT','TEACHER','ADMIN')")
+    public ResponseEntity<ScheduleCompareResultResponse> compareSchedule(
+            @Valid @RequestBody ScheduleCompareRequest request,
+            Principal principal) {
+        return ResponseEntity.ok(scheduleCompareService.compare(request, principal.getName()));
+    }
+
+    @GetMapping("/compare/institutes")
+    @PreAuthorize("hasAnyRole('STUDENT','TEACHER','ADMIN')")
+    public ResponseEntity<List<ScheduleCompareInstituteOptionResponse>> compareInstitutes(Principal principal) {
+        return ResponseEntity.ok(scheduleCompareService.listInstitutes(principal.getName()));
+    }
+
+    @GetMapping("/compare/directions")
+    @PreAuthorize("hasAnyRole('STUDENT','TEACHER','ADMIN')")
+    public ResponseEntity<List<ScheduleCompareDirectionOptionResponse>> compareDirections(
+            @RequestParam Long instituteId,
+            Principal principal) {
+        return ResponseEntity.ok(scheduleCompareService.listDirections(principal.getName(), instituteId));
+    }
+
+    @GetMapping("/compare/groups")
+    @PreAuthorize("hasAnyRole('STUDENT','TEACHER','ADMIN')")
+    public ResponseEntity<List<ScheduleCompareGroupOptionResponse>> compareGroups(
+            @RequestParam(required = false) Long instituteId,
+            @RequestParam(required = false) Long directionId,
+            @RequestParam(required = false) String q,
+            Principal principal) {
+        return ResponseEntity.ok(
+                scheduleCompareService.listGroups(principal.getName(), instituteId, directionId, q));
+    }
+
+    @GetMapping("/compare/teachers")
+    @PreAuthorize("hasAnyRole('STUDENT','TEACHER','ADMIN')")
+    public ResponseEntity<List<ScheduleCompareTeacherOptionResponse>> compareTeachers(
+            @RequestParam(required = false) String q,
+            Principal principal) {
+        return ResponseEntity.ok(scheduleCompareService.listTeachers(principal.getName(), q));
+    }
+
+    @GetMapping("/compare/classrooms")
+    @PreAuthorize("hasAnyRole('STUDENT','TEACHER','ADMIN')")
+    public ResponseEntity<List<ScheduleCompareClassroomOptionResponse>> compareClassrooms(
+            @RequestParam(required = false) String q,
+            Principal principal) {
+        return ResponseEntity.ok(scheduleCompareService.listClassrooms(principal.getName(), q));
     }
 
     @GetMapping("/{id}")

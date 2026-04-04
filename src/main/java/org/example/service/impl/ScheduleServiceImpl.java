@@ -45,7 +45,7 @@ public class ScheduleServiceImpl implements ScheduleService {
     public List<ScheduleResponse> getAllForAdmin(String adminEmail) {
         Long uni = universityScopeService.requireAdminUniversityId(adminEmail);
         return scheduleRepository.findAllByUniversityId(uni).stream()
-                .map(this::mapToResponse)
+                .map(ScheduleResponseMapper::toResponse)
                 .collect(Collectors.toList());
     }
 
@@ -54,7 +54,7 @@ public class ScheduleServiceImpl implements ScheduleService {
     public ScheduleResponse getById(Long id) {
         Schedule schedule = scheduleRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Запись расписания не найдена с id: " + id));
-        return mapToResponse(schedule);
+        return ScheduleResponseMapper.toResponse(schedule);
     }
 
     @Override
@@ -66,7 +66,7 @@ public class ScheduleServiceImpl implements ScheduleService {
         List<Schedule> schedules = findByGroupFiltered(groupId, weekNumber, dayOfWeek);
 
         return schedules.stream()
-                .map(this::mapToResponse)
+                .map(ScheduleResponseMapper::toResponse)
                 .collect(Collectors.toList());
     }
 
@@ -79,7 +79,18 @@ public class ScheduleServiceImpl implements ScheduleService {
         List<Schedule> schedules = findByTeacherFiltered(teacherId, weekNumber, dayOfWeek);
 
         return schedules.stream()
-                .map(this::mapToResponse)
+                .map(ScheduleResponseMapper::toResponse)
+                .collect(Collectors.toList());
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<ScheduleResponse> getByClassroom(Long classroomId, Integer weekNumber, Integer dayOfWeek) {
+        classroomRepository.findById(classroomId)
+                .orElseThrow(() -> new ResourceNotFoundException("Аудитория не найдена"));
+        List<Schedule> schedules = findByClassroomFiltered(classroomId, weekNumber, dayOfWeek);
+        return schedules.stream()
+                .map(ScheduleResponseMapper::toResponse)
                 .collect(Collectors.toList());
     }
 
@@ -118,16 +129,15 @@ public class ScheduleServiceImpl implements ScheduleService {
         LinkedHashSet<Long> groupIds = new LinkedHashSet<>();
         groupIds.addAll(scheduleRepository.findDistinctGroupIdsByTeacherUserId(user.getId()));
         for (TeacherSubject ts : teacherSubjectRepository.findByTeacherId(tp.getId())) {
-            for (SubjectInDirection sid : subjectInDirectionRepository.findBySubjectId(ts.getSubject().getId())) {
-                Long dirId = sid.getDirection().getId();
-                academicGroupRepository.findByDirectionId(dirId).forEach(g -> groupIds.add(g.getId()));
-            }
+            SubjectInDirection sid = ts.getSubjectInDirection();
+            Long dirId = sid.getDirection().getId();
+            academicGroupRepository.findByDirectionId(dirId).forEach(g -> groupIds.add(g.getId()));
         }
 
         Map<Long, ScheduleResponse> merged = new LinkedHashMap<>();
         for (Long gid : groupIds) {
             for (Schedule s : findByGroupFiltered(gid, weekNumber, dayOfWeek)) {
-                merged.putIfAbsent(s.getId(), mapToResponse(s));
+                merged.putIfAbsent(s.getId(), ScheduleResponseMapper.toResponse(s));
             }
         }
         return new ArrayList<>(merged.values());
@@ -180,7 +190,7 @@ public class ScheduleServiceImpl implements ScheduleService {
                 "Создана запись расписания: группа " + group.getId() + ", преподаватель " + teacher.getId());
         notificationService.notifyScheduleChanged(group.getId(), teacher.getId());
 
-        return mapToResponse(schedule);
+        return ScheduleResponseMapper.toResponse(schedule);
     }
 
     @Override
@@ -230,7 +240,7 @@ public class ScheduleServiceImpl implements ScheduleService {
         auditService.log(actorId, "UPDATE_SCHEDULE", "Schedule", schedule.getId(), "Обновлена запись расписания");
         notificationService.notifyScheduleChanged(group.getId(), teacher.getId());
 
-        return mapToResponse(schedule);
+        return ScheduleResponseMapper.toResponse(schedule);
     }
 
     @Override
@@ -284,6 +294,18 @@ public class ScheduleServiceImpl implements ScheduleService {
         }
     }
 
+    private List<Schedule> findByClassroomFiltered(Long classroomId, Integer weekNumber, Integer dayOfWeek) {
+        if (weekNumber != null && dayOfWeek != null) {
+            return scheduleRepository.findByClassroomIdAndWeekNumberAndDayOfWeek(classroomId, weekNumber, dayOfWeek);
+        } else if (weekNumber != null) {
+            return scheduleRepository.findByClassroomIdAndWeekNumber(classroomId, weekNumber);
+        } else if (dayOfWeek != null) {
+            return scheduleRepository.findByClassroomIdAndDayOfWeek(classroomId, dayOfWeek);
+        } else {
+            return scheduleRepository.findByClassroomId(classroomId);
+        }
+    }
+
     private void validateRequest(ScheduleRequest request) {
         if (request.getDayOfWeek() == null || request.getDayOfWeek() < 1 || request.getDayOfWeek() > 7) {
             throw new BadRequestException("День недели должен быть от 1 до 7");
@@ -325,33 +347,4 @@ public class ScheduleServiceImpl implements ScheduleService {
         }
     }
 
-    private ScheduleResponse mapToResponse(Schedule schedule) {
-        SubjectLessonType slt = schedule.getSubjectType();
-        SubjectInDirection sid = slt.getSubjectDirection();
-        Users teacher = schedule.getTeacher();
-        AcademicGroup group = schedule.getGroup();
-        Classroom classroom = schedule.getClassroom();
-
-        String teacherName = teacher.getLastName() + " " + teacher.getFirstName();
-        if (teacher.getMiddleName() != null && !teacher.getMiddleName().isEmpty()) {
-            teacherName += " " + teacher.getMiddleName();
-        }
-
-        return ScheduleResponse.builder()
-                .id(schedule.getId())
-                .subjectTypeId(slt.getId())
-                .subjectName(sid.getSubject().getName())
-                .lessonType(slt.getLessonType())
-                .teacherId(teacher.getId())
-                .teacherName(teacherName)
-                .groupId(group.getId())
-                .groupName(group.getName())
-                .classroomId(classroom.getId())
-                .classroomInfo(classroom.getBuilding() + ", ауд. " + classroom.getRoomNumber())
-                .dayOfWeek(schedule.getDayOfWeek())
-                .startTime(schedule.getStartTime())
-                .endTime(schedule.getEndTime())
-                .weekNumber(schedule.getWeekNumber())
-                .build();
-    }
 }

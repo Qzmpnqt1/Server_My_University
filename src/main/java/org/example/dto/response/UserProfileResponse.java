@@ -43,6 +43,8 @@ public class UserProfileResponse {
     @NoArgsConstructor
     @AllArgsConstructor
     public static class TeacherProfileInfo {
+        /** id из teacher_profiles — для API назначений и расписания. */
+        private Long teacherProfileId;
         private Long instituteId;
         private String instituteName;
         private String position;

@@ -90,7 +90,7 @@ class UserServiceTest {
         when(studentProfileRepository.findByUserId(1L)).thenReturn(Optional.of(sp1));
         when(teacherProfileRepository.findByUserId(2L)).thenReturn(Optional.of(tp2));
 
-        List<UserProfileResponse> result = userService.getAllUsers(null, null, null, null, null, "admin@uni.ru");
+        List<UserProfileResponse> result = userService.getAllUsers(null, null, null, null, null, null, "admin@uni.ru");
 
         assertEquals(2, result.size());
         UserProfileResponse r0 = result.get(0);
@@ -112,6 +112,8 @@ class UserServiceTest {
         assertNull(r1.getMiddleName());
         assertEquals(UserType.TEACHER, r1.getUserType());
         assertFalse(r1.getIsActive());
+        assertNotNull(r1.getTeacherProfile());
+        assertEquals(2L, r1.getTeacherProfile().getTeacherProfileId());
     }
 
     @Test

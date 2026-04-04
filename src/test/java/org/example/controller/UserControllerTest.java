@@ -79,7 +79,7 @@ class UserControllerTest {
                 .createdAt(LocalDateTime.of(2025, 2, 1, 0, 0))
                 .build();
 
-        when(userService.getAllUsers(isNull(), isNull(), isNull(), isNull(), isNull(), eq("admin@uni.ru")))
+        when(userService.getAllUsers(isNull(), isNull(), isNull(), isNull(), isNull(), isNull(), eq("admin@uni.ru")))
                 .thenReturn(List.of(u1, u2));
 
         mockMvc.perform(get("/api/v1/users")

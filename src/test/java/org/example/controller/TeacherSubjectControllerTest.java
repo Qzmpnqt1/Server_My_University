@@ -2,6 +2,7 @@ package org.example.controller;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.example.config.SecurityConfig;
+import org.example.dto.request.TeacherSubjectReplaceRequest;
 import org.example.dto.request.TeacherSubjectRequest;
 import org.example.dto.response.TeacherSubjectResponse;
 import org.example.exception.GlobalExceptionHandler;
@@ -31,6 +32,7 @@ import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -86,6 +88,7 @@ class TeacherSubjectControllerTest {
                 .id(1L)
                 .teacherId(10L)
                 .teacherName("Иванов И.И.")
+                .subjectDirectionId(100L)
                 .subjectId(20L)
                 .subjectName("Алгебра")
                 .build();
@@ -107,6 +110,7 @@ class TeacherSubjectControllerTest {
                 .id(2L)
                 .teacherId(10L)
                 .teacherName("Петров П.П.")
+                .subjectDirectionId(101L)
                 .subjectId(21L)
                 .subjectName("Геометрия")
                 .build();
@@ -136,14 +140,15 @@ class TeacherSubjectControllerTest {
 
         TeacherSubjectRequest request = TeacherSubjectRequest.builder()
                 .teacherId(10L)
-                .subjectId(20L)
+                .subjectDirectionId(20L)
                 .build();
 
         TeacherSubjectResponse created = TeacherSubjectResponse.builder()
                 .id(5L)
                 .teacherId(10L)
                 .teacherName("Сидоров С.С.")
-                .subjectId(20L)
+                .subjectDirectionId(20L)
+                .subjectId(30L)
                 .subjectName("Анализ")
                 .build();
 
@@ -158,13 +163,41 @@ class TeacherSubjectControllerTest {
     }
 
     @Test
+    @DisplayName("PUT /api/v1/teacher-subjects/teachers/{id}/assignments — admin 200")
+    void putReplace_Admin_200() throws Exception {
+        mockAdminAuth();
+
+        TeacherSubjectReplaceRequest request = TeacherSubjectReplaceRequest.builder()
+                .subjectDirectionIds(List.of(1L, 2L))
+                .expectedAssignmentCount(2)
+                .build();
+
+        TeacherSubjectResponse r = TeacherSubjectResponse.builder()
+                .id(1L)
+                .teacherId(10L)
+                .subjectDirectionId(1L)
+                .subjectName("A")
+                .build();
+
+        when(teacherSubjectService.replaceAssignments(eq(10L), any(TeacherSubjectReplaceRequest.class), eq("admin@uni.ru")))
+                .thenReturn(List.of(r));
+
+        mockMvc.perform(put("/api/v1/teacher-subjects/teachers/10/assignments")
+                        .header("Authorization", "Bearer admin-token")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(1));
+    }
+
+    @Test
     @DisplayName("POST /api/v1/teacher-subjects — student 403")
     void post_Student_403() throws Exception {
         mockStudentAuth();
 
         TeacherSubjectRequest request = TeacherSubjectRequest.builder()
                 .teacherId(10L)
-                .subjectId(20L)
+                .subjectDirectionId(20L)
                 .build();
 
         mockMvc.perform(post("/api/v1/teacher-subjects")

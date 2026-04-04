@@ -29,6 +29,7 @@ public class PracticeGradeServiceImpl implements PracticeGradeService {
     private final TeacherProfileRepository teacherProfileRepository;
     private final TeacherSubjectRepository teacherSubjectRepository;
     private final SubjectInDirectionRepository subjectInDirectionRepository;
+    private final StudentProfileRepository studentProfileRepository;
     private final AuditService auditService;
     private final NotificationService notificationService;
     private final UniversityScopeService universityScopeService;
@@ -112,6 +113,8 @@ public class PracticeGradeServiceImpl implements PracticeGradeService {
             universityScopeService.assertSubjectDirectionInUniversity(practice.getSubjectDirection().getId(), uni);
         }
 
+        assertStudentEligibleForPractice(student, practice, request.getGroupId());
+
         validateGrade(request, practice);
 
         practiceGradeRepository.findByStudentIdAndPracticeId(request.getStudentId(), request.getPracticeId())
@@ -154,6 +157,8 @@ public class PracticeGradeServiceImpl implements PracticeGradeService {
                     practiceGrade.getPractice().getSubjectDirection().getId(), uni);
         }
 
+        assertStudentEligibleForPractice(practiceGrade.getStudent(), practiceGrade.getPractice(), request.getGroupId());
+
         validateGrade(request, practiceGrade.getPractice());
 
         practiceGrade.setGrade(request.getGrade());
@@ -169,6 +174,18 @@ public class PracticeGradeServiceImpl implements PracticeGradeService {
         return mapToResponse(practiceGrade);
     }
 
+    private void assertStudentEligibleForPractice(Users student, SubjectPractice practice, Long groupId) {
+        SubjectInDirection sid = practice.getSubjectDirection();
+        StudentProfile sp = studentProfileRepository.findFetchedByUserId(student.getId())
+                .orElseThrow(() -> new BadRequestException("Профиль студента не найден"));
+        if (!sp.getGroup().getDirection().getId().equals(sid.getDirection().getId())) {
+            throw new BadRequestException("Студент не обучается на направлении выбранной дисциплины");
+        }
+        if (groupId != null && !sp.getGroup().getId().equals(groupId)) {
+            throw new BadRequestException("Студент не из выбранной группы");
+        }
+    }
+
     private void verifyTeacherOwnership(Users user, SubjectInDirection sid) {
         if (user.getUserType() != UserType.TEACHER) {
             throw new AccessDeniedException("Только преподаватели и администраторы могут управлять оценками за практики");
@@ -177,8 +194,8 @@ public class PracticeGradeServiceImpl implements PracticeGradeService {
         TeacherProfile teacherProfile = teacherProfileRepository.findByUserId(user.getId())
                 .orElseThrow(() -> new ResourceNotFoundException("Профиль преподавателя не найден"));
 
-        boolean assigned = teacherSubjectRepository.existsByTeacherIdAndSubjectId(
-                teacherProfile.getId(), sid.getSubject().getId());
+        boolean assigned = teacherSubjectRepository.existsByTeacherIdAndSubjectInDirection_Id(
+                teacherProfile.getId(), sid.getId());
         if (!assigned) {
             throw new AccessDeniedException("Преподаватель не назначен на данный предмет");
         }
@@ -194,14 +211,21 @@ public class PracticeGradeServiceImpl implements PracticeGradeService {
             }
         } else {
             if (request.getCreditStatus() != null) {
-                throw new BadRequestException("Для оценочной практики укажите только grade (2–5), без creditStatus");
+                throw new BadRequestException("Для оценочной практики укажите только grade, без creditStatus");
             }
             if (request.getGrade() == null) {
-                throw new BadRequestException("Для оценочной практики необходима числовая оценка 2–5");
+                throw new BadRequestException("Для оценочной практики необходима числовая оценка");
             }
             int g = request.getGrade();
-            if (g < 2 || g > 5) {
-                throw new BadRequestException("Оценка за оценочную практику должна быть от 2 до 5");
+            Integer max = practice.getMaxGrade();
+            if (max != null) {
+                if (g < 0 || g > max) {
+                    throw new BadRequestException("Оценка должна быть от 0 до " + max);
+                }
+            } else {
+                if (g < 2 || g > 5) {
+                    throw new BadRequestException("Оценка за оценочную практику должна быть от 2 до 5");
+                }
             }
         }
     }

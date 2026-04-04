@@ -173,10 +173,10 @@ public class ChatServiceImpl implements ChatService {
     private Long requireUniversityIdForMessaging(String email, Users self) {
         return switch (self.getUserType()) {
             case ADMIN -> universityScopeService.requireAdminUniversityId(email);
-            case STUDENT -> studentProfileRepository.findByUserId(self.getId())
+            case STUDENT -> studentProfileRepository.findFetchedByUserId(self.getId())
                     .map(sp -> sp.getInstitute().getUniversity().getId())
                     .orElseThrow(() -> new BadRequestException("Профиль студента не найден или не привязан к вузу"));
-            case TEACHER -> teacherProfileRepository.findByUserId(self.getId())
+            case TEACHER -> teacherProfileRepository.findFetchedByUserId(self.getId())
                     .map(tp -> tp.getInstitute() != null ? tp.getInstitute().getUniversity().getId() : null)
                     .filter(Objects::nonNull)
                     .orElseThrow(() -> new BadRequestException("Профиль преподавателя не привязан к институту вуза"));

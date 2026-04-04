@@ -9,6 +9,8 @@ import org.example.repository.*;
 import org.example.service.StatisticsService;
 import org.example.service.UniversityScopeService;
 import org.example.util.StatisticsFinalAssessmentUtil;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -20,6 +22,8 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 @Transactional(readOnly = true)
 public class StatisticsServiceImpl implements StatisticsService {
+
+    private static final Logger log = LoggerFactory.getLogger(StatisticsServiceImpl.class);
 
     private final GradeRepository gradeRepository;
     private final PracticeGradeRepository practiceGradeRepository;
@@ -38,6 +42,7 @@ public class StatisticsServiceImpl implements StatisticsService {
 
     @Override
     public SubjectStatisticsResponse getSubjectStatistics(Long subjectDirectionId, String viewerEmail) {
+        log.debug("getSubjectStatistics subjectDirectionId={} viewer={}", subjectDirectionId, viewerEmail);
         SubjectInDirection sid = subjectInDirectionRepository.findById(subjectDirectionId)
                 .orElseThrow(() -> new ResourceNotFoundException("Предмет в направлении не найден"));
         ensureSubjectDirectionAccess(sid, viewerEmail);
@@ -95,6 +100,7 @@ public class StatisticsServiceImpl implements StatisticsService {
 
     @Override
     public PracticeStatisticsResponse getPracticeStatistics(Long subjectDirectionId, String viewerEmail) {
+        log.debug("getPracticeStatistics subjectDirectionId={} viewer={}", subjectDirectionId, viewerEmail);
         SubjectInDirection sid = subjectInDirectionRepository.findById(subjectDirectionId)
                 .orElseThrow(() -> new ResourceNotFoundException("Предмет в направлении не найден"));
         ensureSubjectDirectionAccess(sid, viewerEmail);
@@ -180,6 +186,7 @@ public class StatisticsServiceImpl implements StatisticsService {
 
     @Override
     public GroupStatisticsResponse getGroupStatistics(Long groupId, String viewerEmail) {
+        log.debug("getGroupStatistics groupId={} viewer={}", groupId, viewerEmail);
         AcademicGroup group = academicGroupRepository.findById(groupId)
                 .orElseThrow(() -> new ResourceNotFoundException("Группа не найдена"));
         ensureGroupAccess(group, viewerEmail);
@@ -261,6 +268,7 @@ public class StatisticsServiceImpl implements StatisticsService {
 
     @Override
     public DirectionStatisticsResponse getDirectionStatistics(Long directionId, String viewerEmail) {
+        log.debug("getDirectionStatistics directionId={} viewer={}", directionId, viewerEmail);
         StudyDirection dir = studyDirectionRepository.findById(directionId)
                 .orElseThrow(() -> new ResourceNotFoundException("Направление не найдено"));
         ensureDirectionAccess(dir, viewerEmail);
@@ -295,6 +303,7 @@ public class StatisticsServiceImpl implements StatisticsService {
 
     @Override
     public InstituteStatisticsResponse getInstituteStatistics(Long instituteId, String viewerEmail) {
+        log.debug("getInstituteStatistics instituteId={} viewer={}", instituteId, viewerEmail);
         ensureAdminInstitute(instituteId, viewerEmail);
         Institute inst = instituteRepository.findById(instituteId)
                 .orElseThrow(() -> new ResourceNotFoundException("Институт не найден"));
@@ -331,6 +340,7 @@ public class StatisticsServiceImpl implements StatisticsService {
 
     @Override
     public UniversityStatisticsResponse getUniversityStatistics(Long universityId, String viewerEmail) {
+        log.debug("getUniversityStatistics universityId={} viewer={}", universityId, viewerEmail);
         ensureAdminUniversity(universityId, viewerEmail);
         University uni = universityRepository.findById(universityId)
                 .orElseThrow(() -> new ResourceNotFoundException("Университет не найден"));
@@ -370,6 +380,7 @@ public class StatisticsServiceImpl implements StatisticsService {
 
     @Override
     public ScheduleStatisticsResponse getTeacherScheduleStatistics(Long teacherId, String viewerEmail) {
+        log.debug("getTeacherScheduleStatistics teacherId={} viewer={}", teacherId, viewerEmail);
         Users viewer = usersRepository.findByEmail(viewerEmail)
                 .orElseThrow(() -> new AccessDeniedException("Пользователь не найден"));
         if (viewer.getUserType() == UserType.TEACHER && !viewer.getId().equals(teacherId)) {
@@ -383,6 +394,7 @@ public class StatisticsServiceImpl implements StatisticsService {
 
     @Override
     public ScheduleStatisticsResponse getGroupScheduleStatistics(Long groupId, String viewerEmail) {
+        log.debug("getGroupScheduleStatistics groupId={} viewer={}", groupId, viewerEmail);
         AcademicGroup group = academicGroupRepository.findById(groupId)
                 .orElseThrow(() -> new ResourceNotFoundException("Группа не найдена"));
         ensureGroupAccess(group, viewerEmail);
@@ -391,6 +403,7 @@ public class StatisticsServiceImpl implements StatisticsService {
 
     @Override
     public ScheduleStatisticsResponse getClassroomScheduleStatistics(Long classroomId, String viewerEmail) {
+        log.debug("getClassroomScheduleStatistics classroomId={} viewer={}", classroomId, viewerEmail);
         Users viewer = usersRepository.findByEmail(viewerEmail)
                 .orElseThrow(() -> new AccessDeniedException("Пользователь не найден"));
         if (viewer.getUserType() == UserType.TEACHER) {
@@ -404,6 +417,7 @@ public class StatisticsServiceImpl implements StatisticsService {
     @Override
     public StudentPerformanceSummaryResponse getMyStudentPerformanceSummary(String email, Integer course,
                                                                             Integer semester) {
+        log.debug("getMyStudentPerformanceSummary email={} course={} semester={}", email, course, semester);
         Users user = usersRepository.findByEmail(email)
                 .orElseThrow(() -> new ResourceNotFoundException("Пользователь не найден"));
         if (user.getUserType() != UserType.STUDENT) {

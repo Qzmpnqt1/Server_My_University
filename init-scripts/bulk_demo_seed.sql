@@ -44,7 +44,8 @@ INSERT INTO subjects_in_directions (id, subject_id, direction_id, course, semest
   (5, 5, 3, 2, 3),
   (6, 6, 4, 3, 1),
   (7, 4, 5, 2, 3),
-  (8, 8, 1, 2, 4);
+  (8, 8, 1, 2, 4),
+  (9, 7, 4, 3, 2);
 
 INSERT INTO subject_lesson_types (id, subject_direction_id, lesson_type) VALUES
   (5, 4, 'LECTURE'),
@@ -153,11 +154,11 @@ INSERT INTO student_profiles (user_id, group_id, institute_id) VALUES
   (32, 1, 1), (33, 2, 1), (34, 3, 2), (35, 4, 3), (36, 5, 4), (37, 6, 1), (38, 7, 1),
   (39, 1, 1), (40, 2, 1), (41, 3, 2), (42, 4, 3), (43, 5, 4), (44, 6, 1);
 
--- --------------------------------------------------------------------------- назначение преподавателей на предметы (teacher_id = teacher_profiles.id)
-INSERT INTO teacher_subjects (teacher_id, subject_id) VALUES
-  (1, 1), (1, 2), (2, 2), (2, 4), (3, 3), (3, 5), (4, 6), (4, 7), (5, 1), (5, 8),
-  (6, 2), (7, 3), (8, 4), (9, 5), (10, 6), (11, 7), (12, 8), (13, 1), (14, 2), (15, 3),
-  (16, 4), (17, 5), (18, 6), (19, 7), (20, 8);
+-- --------------------------------------------------------------------------- назначение преподавателей (teacher_id = teacher_profiles.id, subject_direction_id = subjects_in_directions.id)
+INSERT INTO teacher_subjects (teacher_id, subject_direction_id) VALUES
+  (1, 1), (1, 2), (2, 2), (2, 4), (3, 3), (3, 5), (4, 6), (4, 9), (5, 1), (5, 8),
+  (6, 2), (7, 3), (8, 4), (9, 5), (10, 6), (11, 9), (12, 8), (13, 1), (14, 2), (15, 3),
+  (16, 4), (17, 5), (18, 6), (19, 9), (20, 8);
 
 -- --------------------------------------------------------------------------- оценки (часть студентов по существующим sid 1–3 и новым 4–5)
 INSERT INTO grades (student_id, subject_direction_id, grade, credit_status) VALUES
@@ -181,7 +182,7 @@ ALTER TABLE institutes AUTO_INCREMENT = 5;
 ALTER TABLE study_directions AUTO_INCREMENT = 6;
 ALTER TABLE academic_groups AUTO_INCREMENT = 8;
 ALTER TABLE subjects AUTO_INCREMENT = 9;
-ALTER TABLE subjects_in_directions AUTO_INCREMENT = 9;
+ALTER TABLE subjects_in_directions AUTO_INCREMENT = 10;
 ALTER TABLE subject_lesson_types AUTO_INCREMENT = 11;
 ALTER TABLE subject_practices AUTO_INCREMENT = 4;
 ALTER TABLE classrooms AUTO_INCREMENT = 7;

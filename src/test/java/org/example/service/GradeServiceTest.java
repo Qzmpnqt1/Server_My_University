@@ -47,12 +47,16 @@ class GradeServiceTest {
     private TeacherProfile teacherProfile;
     private Subject subject;
     private SubjectInDirection subjectInDirection;
+    private StudyDirection studyDirection;
+    private AcademicGroup studentGroup;
+    private StudentProfile studentProfile;
 
     @BeforeEach
     void setUp() {
         subject = Subject.builder().id(1L).name("Математика").build();
+        studyDirection = StudyDirection.builder().id(1L).name("Направление").build();
         subjectInDirection = SubjectInDirection.builder()
-                .id(1L).subject(subject).semester(1).course(1).build();
+                .id(1L).subject(subject).direction(studyDirection).semester(1).course(1).build();
 
         teacherUser = Users.builder()
                 .id(2L).email("teacher@test.ru").firstName("Алексей").lastName("Попов")
@@ -67,6 +71,10 @@ class GradeServiceTest {
                 .userType(UserType.ADMIN).isActive(true).build();
 
         teacherProfile = TeacherProfile.builder().id(10L).user(teacherUser).build();
+        studentGroup = AcademicGroup.builder().id(100L).name("ИТ-101").direction(studyDirection).build();
+        studentProfile = StudentProfile.builder().id(50L).user(studentUser).group(studentGroup).build();
+
+        lenient().when(studentProfileRepository.findFetchedByUserId(3L)).thenReturn(Optional.of(studentProfile));
 
         lenient().doNothing().when(notificationService).notifyGradeChanged(anyLong(), anyString(), anyBoolean());
         lenient().when(universityScopeService.requireAdminUniversityId("admin@test.ru")).thenReturn(1L);
@@ -154,7 +162,7 @@ class GradeServiceTest {
         when(usersRepository.findByEmail("teacher@test.ru")).thenReturn(Optional.of(teacherUser));
         when(subjectInDirectionRepository.findById(1L)).thenReturn(Optional.of(subjectInDirection));
         when(teacherProfileRepository.findByUserId(2L)).thenReturn(Optional.of(teacherProfile));
-        when(teacherSubjectRepository.existsByTeacherIdAndSubjectId(10L, 1L)).thenReturn(true);
+        when(teacherSubjectRepository.existsByTeacherIdAndSubjectInDirection_Id(10L, 1L)).thenReturn(true);
         when(gradeRepository.findBySubjectDirectionId(1L)).thenReturn(List.of(sampleGrade()));
 
         List<GradeResponse> result = gradeService.getBySubjectDirection(1L, "teacher@test.ru");
@@ -167,7 +175,7 @@ class GradeServiceTest {
         when(usersRepository.findByEmail("teacher@test.ru")).thenReturn(Optional.of(teacherUser));
         when(subjectInDirectionRepository.findById(1L)).thenReturn(Optional.of(subjectInDirection));
         when(teacherProfileRepository.findByUserId(2L)).thenReturn(Optional.of(teacherProfile));
-        when(teacherSubjectRepository.existsByTeacherIdAndSubjectId(10L, 1L)).thenReturn(false);
+        when(teacherSubjectRepository.existsByTeacherIdAndSubjectInDirection_Id(10L, 1L)).thenReturn(false);
 
         assertThrows(AccessDeniedException.class,
                 () -> gradeService.getBySubjectDirection(1L, "teacher@test.ru"));
@@ -196,7 +204,7 @@ class GradeServiceTest {
         when(usersRepository.findById(3L)).thenReturn(Optional.of(studentUser));
         when(subjectInDirectionRepository.findById(1L)).thenReturn(Optional.of(subjectInDirection));
         when(teacherProfileRepository.findByUserId(2L)).thenReturn(Optional.of(teacherProfile));
-        when(teacherSubjectRepository.existsByTeacherIdAndSubjectId(10L, 1L)).thenReturn(true);
+        when(teacherSubjectRepository.existsByTeacherIdAndSubjectInDirection_Id(10L, 1L)).thenReturn(true);
         when(gradeRepository.findByStudentIdAndSubjectDirectionId(3L, 1L)).thenReturn(Optional.empty());
         when(gradeRepository.save(any(Grade.class))).thenReturn(sampleGrade());
 
@@ -222,7 +230,7 @@ class GradeServiceTest {
 
         GradeResponse response = gradeService.create(request, "admin@test.ru");
         assertNotNull(response);
-        verify(teacherSubjectRepository, never()).existsByTeacherIdAndSubjectId(anyLong(), anyLong());
+        verify(teacherSubjectRepository, never()).existsByTeacherIdAndSubjectInDirection_Id(anyLong(), anyLong());
     }
 
     @Test
@@ -235,7 +243,7 @@ class GradeServiceTest {
         when(usersRepository.findById(3L)).thenReturn(Optional.of(studentUser));
         when(subjectInDirectionRepository.findById(1L)).thenReturn(Optional.of(subjectInDirection));
         when(teacherProfileRepository.findByUserId(2L)).thenReturn(Optional.of(teacherProfile));
-        when(teacherSubjectRepository.existsByTeacherIdAndSubjectId(10L, 1L)).thenReturn(false);
+        when(teacherSubjectRepository.existsByTeacherIdAndSubjectInDirection_Id(10L, 1L)).thenReturn(false);
 
         assertThrows(AccessDeniedException.class, () -> gradeService.create(request, "teacher@test.ru"));
         verify(gradeRepository, never()).save(any());
@@ -251,7 +259,7 @@ class GradeServiceTest {
         when(usersRepository.findById(3L)).thenReturn(Optional.of(studentUser));
         when(subjectInDirectionRepository.findById(1L)).thenReturn(Optional.of(subjectInDirection));
         when(teacherProfileRepository.findByUserId(2L)).thenReturn(Optional.of(teacherProfile));
-        when(teacherSubjectRepository.existsByTeacherIdAndSubjectId(10L, 1L)).thenReturn(true);
+        when(teacherSubjectRepository.existsByTeacherIdAndSubjectInDirection_Id(10L, 1L)).thenReturn(true);
         when(gradeRepository.findByStudentIdAndSubjectDirectionId(3L, 1L))
                 .thenReturn(Optional.of(Grade.builder().id(99L).build()));
 
@@ -269,7 +277,7 @@ class GradeServiceTest {
         when(usersRepository.findById(3L)).thenReturn(Optional.of(studentUser));
         when(subjectInDirectionRepository.findById(1L)).thenReturn(Optional.of(subjectInDirection));
         when(teacherProfileRepository.findByUserId(2L)).thenReturn(Optional.of(teacherProfile));
-        when(teacherSubjectRepository.existsByTeacherIdAndSubjectId(10L, 1L)).thenReturn(true);
+        when(teacherSubjectRepository.existsByTeacherIdAndSubjectInDirection_Id(10L, 1L)).thenReturn(true);
 
         assertThrows(BadRequestException.class, () -> gradeService.create(request, "teacher@test.ru"));
         verify(gradeRepository, never()).save(any());
@@ -285,7 +293,7 @@ class GradeServiceTest {
         when(usersRepository.findById(3L)).thenReturn(Optional.of(studentUser));
         when(subjectInDirectionRepository.findById(1L)).thenReturn(Optional.of(subjectInDirection));
         when(teacherProfileRepository.findByUserId(2L)).thenReturn(Optional.of(teacherProfile));
-        when(teacherSubjectRepository.existsByTeacherIdAndSubjectId(10L, 1L)).thenReturn(true);
+        when(teacherSubjectRepository.existsByTeacherIdAndSubjectInDirection_Id(10L, 1L)).thenReturn(true);
 
         assertThrows(BadRequestException.class, () -> gradeService.create(request, "teacher@test.ru"));
     }
@@ -300,7 +308,7 @@ class GradeServiceTest {
         when(usersRepository.findById(3L)).thenReturn(Optional.of(studentUser));
         when(subjectInDirectionRepository.findById(1L)).thenReturn(Optional.of(subjectInDirection));
         when(teacherProfileRepository.findByUserId(2L)).thenReturn(Optional.of(teacherProfile));
-        when(teacherSubjectRepository.existsByTeacherIdAndSubjectId(10L, 1L)).thenReturn(true);
+        when(teacherSubjectRepository.existsByTeacherIdAndSubjectInDirection_Id(10L, 1L)).thenReturn(true);
 
         assertThrows(BadRequestException.class, () -> gradeService.create(request, "teacher@test.ru"));
     }
@@ -330,7 +338,7 @@ class GradeServiceTest {
         when(usersRepository.findByEmail("teacher@test.ru")).thenReturn(Optional.of(teacherUser));
         when(gradeRepository.findById(1L)).thenReturn(Optional.of(existing));
         when(teacherProfileRepository.findByUserId(2L)).thenReturn(Optional.of(teacherProfile));
-        when(teacherSubjectRepository.existsByTeacherIdAndSubjectId(10L, 1L)).thenReturn(true);
+        when(teacherSubjectRepository.existsByTeacherIdAndSubjectInDirection_Id(10L, 1L)).thenReturn(true);
         when(gradeRepository.save(any(Grade.class))).thenReturn(existing);
 
         GradeResponse response = gradeService.update(1L, request, "teacher@test.ru");
@@ -362,7 +370,7 @@ class GradeServiceTest {
         when(usersRepository.findByEmail("teacher@test.ru")).thenReturn(Optional.of(teacherUser));
         when(gradeRepository.findById(1L)).thenReturn(Optional.of(existing));
         when(teacherProfileRepository.findByUserId(2L)).thenReturn(Optional.of(teacherProfile));
-        when(teacherSubjectRepository.existsByTeacherIdAndSubjectId(10L, 1L)).thenReturn(false);
+        when(teacherSubjectRepository.existsByTeacherIdAndSubjectInDirection_Id(10L, 1L)).thenReturn(false);
 
         assertThrows(AccessDeniedException.class,
                 () -> gradeService.update(1L, request, "teacher@test.ru"));
@@ -382,6 +390,6 @@ class GradeServiceTest {
 
         GradeResponse response = gradeService.update(1L, request, "admin@test.ru");
         assertNotNull(response);
-        verify(teacherSubjectRepository, never()).existsByTeacherIdAndSubjectId(anyLong(), anyLong());
+        verify(teacherSubjectRepository, never()).existsByTeacherIdAndSubjectInDirection_Id(anyLong(), anyLong());
     }
 }

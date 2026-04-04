@@ -21,4 +21,7 @@ public class GradeRequest {
     private Integer grade;
 
     private Boolean creditStatus;
+
+    /** Если задано — студент должен состоять в этой группе (усиление проверки при каскадном UI). */
+    private Long groupId;
 }

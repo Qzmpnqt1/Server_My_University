@@ -58,6 +58,7 @@ public class UserProfileServiceImpl implements UserProfileService {
                         .orElse(null);
                 if (profile != null) {
                     responseBuilder.teacherProfile(UserProfileResponse.TeacherProfileInfo.builder()
+                            .teacherProfileId(profile.getId())
                             .instituteId(profile.getInstitute() != null ? profile.getInstitute().getId() : null)
                             .instituteName(profile.getInstitute() != null ? profile.getInstitute().getName() : null)
                             .position(profile.getPosition())

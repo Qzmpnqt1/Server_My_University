@@ -15,6 +15,8 @@ public interface ScheduleService {
 
     List<ScheduleResponse> getByTeacher(Long teacherId, Integer weekNumber, Integer dayOfWeek);
 
+    List<ScheduleResponse> getByClassroom(Long classroomId, Integer weekNumber, Integer dayOfWeek);
+
     List<ScheduleResponse> getMySchedule(String email, Integer weekNumber, Integer dayOfWeek);
 
     /**

@@ -2,6 +2,7 @@ package org.example.controller;
 
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.example.dto.request.TeacherSubjectReplaceRequest;
 import org.example.dto.request.TeacherSubjectRequest;
 import org.example.dto.response.TeacherSubjectResponse;
 import org.example.service.TeacherSubjectService;
@@ -41,6 +42,16 @@ public class TeacherSubjectController {
             Principal principal) {
         return ResponseEntity.status(HttpStatus.CREATED)
                 .body(teacherSubjectService.create(request, principal.getName()));
+    }
+
+    @PutMapping("/teachers/{teacherProfileId}/assignments")
+    @PreAuthorize("hasRole('ADMIN')")
+    public ResponseEntity<List<TeacherSubjectResponse>> replaceAssignments(
+            @PathVariable Long teacherProfileId,
+            @Valid @RequestBody TeacherSubjectReplaceRequest request,
+            Principal principal) {
+        return ResponseEntity.ok(teacherSubjectService.replaceAssignments(
+                teacherProfileId, request, principal.getName()));
     }
 
     @DeleteMapping("/{id}")

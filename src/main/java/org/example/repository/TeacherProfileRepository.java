@@ -16,7 +16,8 @@ public interface TeacherProfileRepository extends JpaRepository<TeacherProfile, 
 
     @Query("""
             SELECT tp FROM TeacherProfile tp
-            LEFT JOIN FETCH tp.institute
+            LEFT JOIN FETCH tp.institute i
+            LEFT JOIN FETCH i.university
             WHERE tp.user.id = :userId
             """)
     Optional<TeacherProfile> findFetchedByUserId(@Param("userId") Long userId);

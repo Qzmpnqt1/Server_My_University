@@ -191,6 +191,8 @@ public class GradeServiceImpl implements GradeService {
             universityScopeService.assertSubjectDirectionInUniversity(request.getSubjectDirectionId(), uni);
         }
 
+        assertStudentEligibleForSubjectDirection(student, sid, request.getGroupId());
+
         validateGrade(request, sid);
 
         gradeRepository.findByStudentIdAndSubjectDirectionId(request.getStudentId(), request.getSubjectDirectionId())
@@ -230,6 +232,8 @@ public class GradeServiceImpl implements GradeService {
             universityScopeService.assertUserInUniversity(grade.getStudent().getId(), uni);
             universityScopeService.assertSubjectDirectionInUniversity(grade.getSubjectDirection().getId(), uni);
         }
+
+        assertStudentEligibleForSubjectDirection(grade.getStudent(), grade.getSubjectDirection(), request.getGroupId());
 
         validateGrade(request, grade.getSubjectDirection());
 
@@ -298,6 +302,17 @@ public class GradeServiceImpl implements GradeService {
         }
     }
 
+    private void assertStudentEligibleForSubjectDirection(Users student, SubjectInDirection sid, Long groupId) {
+        StudentProfile sp = studentProfileRepository.findFetchedByUserId(student.getId())
+                .orElseThrow(() -> new BadRequestException("Профиль студента не найден"));
+        if (!sp.getGroup().getDirection().getId().equals(sid.getDirection().getId())) {
+            throw new BadRequestException("Студент не обучается на направлении выбранной дисциплины");
+        }
+        if (groupId != null && !sp.getGroup().getId().equals(groupId)) {
+            throw new BadRequestException("Студент не из выбранной группы");
+        }
+    }
+
     private void verifyTeacherOwnership(Users user, SubjectInDirection sid) {
         if (user.getUserType() != UserType.TEACHER) {
             throw new AccessDeniedException("Только преподаватели и администраторы могут управлять оценками");
@@ -306,8 +321,8 @@ public class GradeServiceImpl implements GradeService {
         TeacherProfile teacherProfile = teacherProfileRepository.findByUserId(user.getId())
                 .orElseThrow(() -> new ResourceNotFoundException("Профиль преподавателя не найден"));
 
-        boolean assigned = teacherSubjectRepository.existsByTeacherIdAndSubjectId(
-                teacherProfile.getId(), sid.getSubject().getId());
+        boolean assigned = teacherSubjectRepository.existsByTeacherIdAndSubjectInDirection_Id(
+                teacherProfile.getId(), sid.getId());
         if (!assigned) {
             throw new AccessDeniedException("Преподаватель не назначен на данный предмет");
         }

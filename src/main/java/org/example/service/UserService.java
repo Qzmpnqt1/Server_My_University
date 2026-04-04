@@ -7,7 +7,7 @@ import java.util.List;
 
 public interface UserService {
     List<UserProfileResponse> getAllUsers(UserType userType, Boolean isActive, Long universityId,
-                                          Long instituteId, Long groupId, String actorEmail);
+                                          Long instituteId, Long groupId, String searchQuery, String actorEmail);
     UserProfileResponse getUserById(Long id, String actorEmail);
     void activateUser(Long id, String adminEmail);
     void deactivateUser(Long id, String adminEmail);

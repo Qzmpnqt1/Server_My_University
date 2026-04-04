@@ -27,6 +27,7 @@ public class UniversityScopeServiceImpl implements UniversityScopeService {
     private final ClassroomRepository classroomRepository;
     private final SubjectInDirectionRepository subjectInDirectionRepository;
     private final RegistrationRequestRepository registrationRequestRepository;
+    private final ScheduleRepository scheduleRepository;
 
     @Override
     public Set<Long> allUserIdsInUniversity(Long universityId) {
@@ -44,7 +45,7 @@ public class UniversityScopeServiceImpl implements UniversityScopeService {
         if (u.getUserType() != UserType.ADMIN) {
             throw new AccessDeniedException("Требуются права администратора");
         }
-        return adminProfileRepository.findByUserId(u.getId())
+        return adminProfileRepository.findFetchedByUserId(u.getId())
                 .map(ap -> ap.getUniversity().getId())
                 .orElseThrow(() -> new AccessDeniedException("Администратор не привязан к вузу"));
     }
@@ -52,19 +53,25 @@ public class UniversityScopeServiceImpl implements UniversityScopeService {
     @Override
     public boolean userBelongsToUniversity(Long userId, Long universityId) {
         Users u = usersRepository.findById(userId).orElse(null);
-        if (u == null) {
+        if (u == null || u.getUserType() == null) {
             return false;
         }
         return switch (u.getUserType()) {
             case STUDENT -> studentProfileRepository.findByUserId(userId)
-                    .map(sp -> sp.getInstitute().getUniversity().getId().equals(universityId))
+                    .map(sp -> {
+                        if (sp.getInstitute() == null || sp.getInstitute().getUniversity() == null) {
+                            return false;
+                        }
+                        return sp.getInstitute().getUniversity().getId().equals(universityId);
+                    })
                     .orElse(false);
             case TEACHER -> teacherProfileRepository.findByUserId(userId)
                     .map(tp -> tp.getInstitute() != null
+                            && tp.getInstitute().getUniversity() != null
                             && tp.getInstitute().getUniversity().getId().equals(universityId))
                     .orElse(false);
             case ADMIN -> adminProfileRepository.findByUserId(userId)
-                    .map(ap -> ap.getUniversity().getId().equals(universityId))
+                    .map(ap -> ap.getUniversity() != null && ap.getUniversity().getId().equals(universityId))
                     .orElse(false);
         };
     }
@@ -135,5 +142,17 @@ public class UniversityScopeServiceImpl implements UniversityScopeService {
         if (r.getUniversity() == null || !r.getUniversity().getId().equals(universityId)) {
             throw new AccessDeniedException("Заявка не относится к вашему вузу");
         }
+    }
+
+    @Override
+    public boolean teacherUserInUniversity(Long teacherUserId, Long universityId) {
+        if (userBelongsToUniversity(teacherUserId, universityId)) {
+            return true;
+        }
+        Users u = usersRepository.findById(teacherUserId).orElse(null);
+        if (u == null || u.getUserType() != UserType.TEACHER) {
+            return false;
+        }
+        return scheduleRepository.existsByTeacherUserIdAndUniversityId(teacherUserId, universityId);
     }
 }

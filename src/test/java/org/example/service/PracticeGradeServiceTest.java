@@ -34,6 +34,7 @@ class PracticeGradeServiceTest {
     @Mock private TeacherProfileRepository teacherProfileRepository;
     @Mock private TeacherSubjectRepository teacherSubjectRepository;
     @Mock private SubjectInDirectionRepository subjectInDirectionRepository;
+    @Mock private StudentProfileRepository studentProfileRepository;
     @Mock private AuditService auditService;
     @Mock private NotificationService notificationService;
     @Mock private UniversityScopeService universityScopeService;
@@ -49,12 +50,16 @@ class PracticeGradeServiceTest {
     private SubjectInDirection subjectInDirection;
     private SubjectPractice practice;
     private SubjectPractice creditPractice;
+    private StudyDirection studyDirection;
+    private AcademicGroup studentGroup;
+    private StudentProfile studentProfile;
 
     @BeforeEach
     void setUp() {
         subject = Subject.builder().id(1L).name("Программирование").build();
+        studyDirection = StudyDirection.builder().id(1L).name("ИВТ").build();
         subjectInDirection = SubjectInDirection.builder()
-                .id(1L).subject(subject).semester(1).course(1).build();
+                .id(1L).subject(subject).direction(studyDirection).semester(1).course(1).build();
 
         practice = SubjectPractice.builder()
                 .id(1L).subjectDirection(subjectInDirection).practiceNumber(1)
@@ -77,6 +82,9 @@ class PracticeGradeServiceTest {
                 .userType(UserType.ADMIN).isActive(true).build();
 
         teacherProfile = TeacherProfile.builder().id(10L).user(teacherUser).build();
+        studentGroup = AcademicGroup.builder().id(200L).name("ПИ-21").direction(studyDirection).build();
+        studentProfile = StudentProfile.builder().id(60L).user(studentUser).group(studentGroup).build();
+        lenient().when(studentProfileRepository.findFetchedByUserId(3L)).thenReturn(Optional.of(studentProfile));
 
         lenient().doNothing().when(notificationService).notifyGradeChanged(anyLong(), anyString(), anyBoolean());
         lenient().when(universityScopeService.requireAdminUniversityId("admin@test.ru")).thenReturn(1L);
@@ -136,7 +144,7 @@ class PracticeGradeServiceTest {
         when(usersRepository.findByEmail("teacher@test.ru")).thenReturn(Optional.of(teacherUser));
         when(subjectPracticeRepository.findById(1L)).thenReturn(Optional.of(practice));
         when(teacherProfileRepository.findByUserId(2L)).thenReturn(Optional.of(teacherProfile));
-        when(teacherSubjectRepository.existsByTeacherIdAndSubjectId(10L, 1L)).thenReturn(true);
+        when(teacherSubjectRepository.existsByTeacherIdAndSubjectInDirection_Id(10L, 1L)).thenReturn(true);
         when(practiceGradeRepository.findByPracticeId(1L)).thenReturn(List.of(samplePracticeGrade()));
 
         List<PracticeGradeResponse> result =
@@ -150,7 +158,7 @@ class PracticeGradeServiceTest {
         when(usersRepository.findByEmail("teacher@test.ru")).thenReturn(Optional.of(teacherUser));
         when(subjectPracticeRepository.findById(1L)).thenReturn(Optional.of(practice));
         when(teacherProfileRepository.findByUserId(2L)).thenReturn(Optional.of(teacherProfile));
-        when(teacherSubjectRepository.existsByTeacherIdAndSubjectId(10L, 1L)).thenReturn(false);
+        when(teacherSubjectRepository.existsByTeacherIdAndSubjectInDirection_Id(10L, 1L)).thenReturn(false);
 
         assertThrows(AccessDeniedException.class,
                 () -> practiceGradeService.getByPractice(1L, "teacher@test.ru"));
@@ -180,7 +188,7 @@ class PracticeGradeServiceTest {
         when(usersRepository.findById(3L)).thenReturn(Optional.of(studentUser));
         when(subjectPracticeRepository.findById(1L)).thenReturn(Optional.of(practice));
         when(teacherProfileRepository.findByUserId(2L)).thenReturn(Optional.of(teacherProfile));
-        when(teacherSubjectRepository.existsByTeacherIdAndSubjectId(10L, 1L)).thenReturn(true);
+        when(teacherSubjectRepository.existsByTeacherIdAndSubjectInDirection_Id(10L, 1L)).thenReturn(true);
         when(practiceGradeRepository.findByStudentIdAndPracticeId(3L, 1L)).thenReturn(Optional.empty());
         when(practiceGradeRepository.save(any(PracticeGrade.class))).thenReturn(samplePracticeGrade());
 
@@ -208,7 +216,7 @@ class PracticeGradeServiceTest {
 
         PracticeGradeResponse response = practiceGradeService.create(request, "admin@test.ru");
         assertNotNull(response);
-        verify(teacherSubjectRepository, never()).existsByTeacherIdAndSubjectId(anyLong(), anyLong());
+        verify(teacherSubjectRepository, never()).existsByTeacherIdAndSubjectInDirection_Id(anyLong(), anyLong());
     }
 
     @Test
@@ -221,7 +229,7 @@ class PracticeGradeServiceTest {
         when(usersRepository.findById(3L)).thenReturn(Optional.of(studentUser));
         when(subjectPracticeRepository.findById(1L)).thenReturn(Optional.of(practice));
         when(teacherProfileRepository.findByUserId(2L)).thenReturn(Optional.of(teacherProfile));
-        when(teacherSubjectRepository.existsByTeacherIdAndSubjectId(10L, 1L)).thenReturn(true);
+        when(teacherSubjectRepository.existsByTeacherIdAndSubjectInDirection_Id(10L, 1L)).thenReturn(true);
 
         assertThrows(BadRequestException.class, () -> practiceGradeService.create(request, "teacher@test.ru"));
         verify(practiceGradeRepository, never()).save(any());
@@ -237,7 +245,7 @@ class PracticeGradeServiceTest {
         when(usersRepository.findById(3L)).thenReturn(Optional.of(studentUser));
         when(subjectPracticeRepository.findById(1L)).thenReturn(Optional.of(practice));
         when(teacherProfileRepository.findByUserId(2L)).thenReturn(Optional.of(teacherProfile));
-        when(teacherSubjectRepository.existsByTeacherIdAndSubjectId(10L, 1L)).thenReturn(true);
+        when(teacherSubjectRepository.existsByTeacherIdAndSubjectInDirection_Id(10L, 1L)).thenReturn(true);
 
         assertThrows(BadRequestException.class, () -> practiceGradeService.create(request, "teacher@test.ru"));
     }
@@ -252,7 +260,7 @@ class PracticeGradeServiceTest {
         when(usersRepository.findById(3L)).thenReturn(Optional.of(studentUser));
         when(subjectPracticeRepository.findById(2L)).thenReturn(Optional.of(creditPractice));
         when(teacherProfileRepository.findByUserId(2L)).thenReturn(Optional.of(teacherProfile));
-        when(teacherSubjectRepository.existsByTeacherIdAndSubjectId(10L, 1L)).thenReturn(true);
+        when(teacherSubjectRepository.existsByTeacherIdAndSubjectInDirection_Id(10L, 1L)).thenReturn(true);
 
         assertThrows(BadRequestException.class, () -> practiceGradeService.create(request, "teacher@test.ru"));
         verify(practiceGradeRepository, never()).save(any());
@@ -268,7 +276,7 @@ class PracticeGradeServiceTest {
         when(usersRepository.findById(3L)).thenReturn(Optional.of(studentUser));
         when(subjectPracticeRepository.findById(1L)).thenReturn(Optional.of(practice));
         when(teacherProfileRepository.findByUserId(2L)).thenReturn(Optional.of(teacherProfile));
-        when(teacherSubjectRepository.existsByTeacherIdAndSubjectId(10L, 1L)).thenReturn(true);
+        when(teacherSubjectRepository.existsByTeacherIdAndSubjectInDirection_Id(10L, 1L)).thenReturn(true);
         when(practiceGradeRepository.findByStudentIdAndPracticeId(3L, 1L))
                 .thenReturn(Optional.of(PracticeGrade.builder().id(99L).build()));
 
@@ -286,7 +294,7 @@ class PracticeGradeServiceTest {
         when(usersRepository.findById(3L)).thenReturn(Optional.of(studentUser));
         when(subjectPracticeRepository.findById(1L)).thenReturn(Optional.of(practice));
         when(teacherProfileRepository.findByUserId(2L)).thenReturn(Optional.of(teacherProfile));
-        when(teacherSubjectRepository.existsByTeacherIdAndSubjectId(10L, 1L)).thenReturn(false);
+        when(teacherSubjectRepository.existsByTeacherIdAndSubjectInDirection_Id(10L, 1L)).thenReturn(false);
 
         assertThrows(AccessDeniedException.class, () -> practiceGradeService.create(request, "teacher@test.ru"));
         verify(practiceGradeRepository, never()).save(any());
@@ -317,7 +325,7 @@ class PracticeGradeServiceTest {
         when(usersRepository.findByEmail("teacher@test.ru")).thenReturn(Optional.of(teacherUser));
         when(practiceGradeRepository.findById(1L)).thenReturn(Optional.of(existing));
         when(teacherProfileRepository.findByUserId(2L)).thenReturn(Optional.of(teacherProfile));
-        when(teacherSubjectRepository.existsByTeacherIdAndSubjectId(10L, 1L)).thenReturn(true);
+        when(teacherSubjectRepository.existsByTeacherIdAndSubjectInDirection_Id(10L, 1L)).thenReturn(true);
         when(practiceGradeRepository.save(any(PracticeGrade.class))).thenReturn(existing);
 
         PracticeGradeResponse response = practiceGradeService.update(1L, request, "teacher@test.ru");
@@ -349,7 +357,7 @@ class PracticeGradeServiceTest {
         when(usersRepository.findByEmail("teacher@test.ru")).thenReturn(Optional.of(teacherUser));
         when(practiceGradeRepository.findById(1L)).thenReturn(Optional.of(existing));
         when(teacherProfileRepository.findByUserId(2L)).thenReturn(Optional.of(teacherProfile));
-        when(teacherSubjectRepository.existsByTeacherIdAndSubjectId(10L, 1L)).thenReturn(false);
+        when(teacherSubjectRepository.existsByTeacherIdAndSubjectInDirection_Id(10L, 1L)).thenReturn(false);
 
         assertThrows(AccessDeniedException.class,
                 () -> practiceGradeService.update(1L, request, "teacher@test.ru"));

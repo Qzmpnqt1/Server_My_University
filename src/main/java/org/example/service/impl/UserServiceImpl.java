@@ -30,21 +30,33 @@ public class UserServiceImpl implements UserService {
     @Override
     @Transactional(readOnly = true)
     public List<UserProfileResponse> getAllUsers(UserType userType, Boolean isActive, Long universityId,
-                                                 Long instituteId, Long groupId, String actorEmail) {
+                                                 Long instituteId, Long groupId, String searchQuery,
+                                                 String actorEmail) {
         Users actor = usersRepository.findByEmail(actorEmail)
                 .orElseThrow(() -> new ResourceNotFoundException("Пользователь не найден"));
         if (actor.getUserType() != UserType.ADMIN) {
             throw new org.example.exception.AccessDeniedException("Список пользователей доступен только администратору");
         }
         Long adminUni = universityScopeService.requireAdminUniversityId(actorEmail);
+        final String q = searchQuery == null ? null : searchQuery.trim().toLowerCase();
         return usersRepository.findAll().stream()
                 .filter(u -> userType == null || u.getUserType() == userType)
                 .filter(u -> isActive == null || Objects.equals(isActive, u.getIsActive()))
                 .filter(u -> groupId == null || matchesGroup(u, groupId))
                 .filter(u -> instituteId == null || matchesInstitute(u, instituteId))
                 .filter(u -> matchesUniversity(u, adminUni))
-                .map(this::toResponse)
+                .filter(u -> q == null || q.isEmpty() || matchesNameSearch(u, q))
+                .map(this::toFullResponse)
                 .collect(Collectors.toList());
+    }
+
+    private boolean matchesNameSearch(Users u, String needleLower) {
+        String ln = u.getLastName() != null ? u.getLastName().toLowerCase() : "";
+        String fn = u.getFirstName() != null ? u.getFirstName().toLowerCase() : "";
+        String mn = u.getMiddleName() != null ? u.getMiddleName().toLowerCase() : "";
+        String full = (ln + " " + fn + " " + mn).trim();
+        return ln.contains(needleLower) || fn.contains(needleLower) || mn.contains(needleLower)
+                || full.contains(needleLower);
     }
 
     private boolean matchesGroup(Users u, Long groupId) {
@@ -169,6 +181,7 @@ public class UserServiceImpl implements UserService {
                             .build()));
             case TEACHER -> teacherProfileRepository.findByUserId(user.getId()).ifPresent(profile ->
                     builder.teacherProfile(UserProfileResponse.TeacherProfileInfo.builder()
+                            .teacherProfileId(profile.getId())
                             .instituteId(profile.getInstitute() != null ? profile.getInstitute().getId() : null)
                             .instituteName(profile.getInstitute() != null ? profile.getInstitute().getName() : null)
                             .position(profile.getPosition())

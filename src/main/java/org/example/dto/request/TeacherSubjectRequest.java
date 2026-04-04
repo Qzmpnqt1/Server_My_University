@@ -6,6 +6,7 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
+/** Одно назначение: преподаватель (teacher_profiles.id) + позиция учебного плана. */
 @Data
 @Builder
 @NoArgsConstructor
@@ -16,5 +17,5 @@ public class TeacherSubjectRequest {
     private Long teacherId;
 
     @NotNull
-    private Long subjectId;
+    private Long subjectDirectionId;
 }

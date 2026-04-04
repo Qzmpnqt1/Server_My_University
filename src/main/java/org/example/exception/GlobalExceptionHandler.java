@@ -93,7 +93,7 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ErrorResponse> handleGenericException(Exception ex) {
-        log.error("Unexpected error occurred", ex);
+        log.error("Unexpected error: {} — {}", ex.getClass().getSimpleName(), ex.getMessage(), ex);
         ErrorResponse error = new ErrorResponse(
                 HttpStatus.INTERNAL_SERVER_ERROR.value(),
                 "Внутренняя ошибка сервера"

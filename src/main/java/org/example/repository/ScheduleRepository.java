@@ -35,8 +35,28 @@ public interface ScheduleRepository extends JpaRepository<Schedule, Long> {
 
     List<Schedule> findByClassroomId(Long classroomId);
 
+    List<Schedule> findByClassroomIdAndWeekNumber(Long classroomId, Integer weekNumber);
+
+    List<Schedule> findByClassroomIdAndDayOfWeek(Long classroomId, Integer dayOfWeek);
+
+    List<Schedule> findByClassroomIdAndWeekNumberAndDayOfWeek(Long classroomId, Integer weekNumber, Integer dayOfWeek);
+
+    @Query("""
+            SELECT CASE WHEN COUNT(s) > 0 THEN true ELSE false END
+            FROM Schedule s
+            JOIN s.group g JOIN g.direction d JOIN d.institute i
+            WHERE s.teacher.id = :teacherUserId AND i.university.id = :uniId""")
+    boolean existsByTeacherUserIdAndUniversityId(@Param("teacherUserId") Long teacherUserId,
+                                                  @Param("uniId") Long uniId);
+
     @Query("SELECT DISTINCT s.group.id FROM Schedule s WHERE s.teacher.id = :teacherUserId")
     List<Long> findDistinctGroupIdsByTeacherUserId(@Param("teacherUserId") Long teacherUserId);
+
+    @Query("""
+            SELECT DISTINCT s.teacher.id FROM Schedule s
+            JOIN s.group g JOIN g.direction d JOIN d.institute i
+            WHERE i.university.id = :uniId""")
+    List<Long> findDistinctTeacherUserIdsByUniversityId(@Param("uniId") Long universityId);
 
     @Query("SELECT s FROM Schedule s WHERE s.dayOfWeek = :dayOfWeek AND s.weekNumber = :weekNumber " +
             "AND s.startTime < :endTime AND s.endTime > :startTime " +

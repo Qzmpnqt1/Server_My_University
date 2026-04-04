@@ -17,7 +17,8 @@ public interface StudentProfileRepository extends JpaRepository<StudentProfile, 
     @Query("""
             SELECT sp FROM StudentProfile sp
             JOIN FETCH sp.group
-            JOIN FETCH sp.institute
+            JOIN FETCH sp.institute i
+            JOIN FETCH i.university
             WHERE sp.user.id = :userId
             """)
     Optional<StudentProfile> findFetchedByUserId(@Param("userId") Long userId);

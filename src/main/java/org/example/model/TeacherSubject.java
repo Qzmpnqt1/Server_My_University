@@ -7,7 +7,7 @@ import java.time.LocalDateTime;
 
 @Entity
 @Table(name = "teacher_subjects", uniqueConstraints = {
-        @UniqueConstraint(columnNames = {"teacher_id", "subject_id"})
+        @UniqueConstraint(columnNames = {"teacher_id", "subject_direction_id"})
 })
 @Getter
 @Setter
@@ -24,9 +24,10 @@ public class TeacherSubject {
     @JoinColumn(name = "teacher_id", nullable = false)
     private TeacherProfile teacher;
 
+    /** Связь с конкретной позицией учебного плана (предмет в рамках направления). */
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "subject_id", nullable = false)
-    private Subject subject;
+    @JoinColumn(name = "subject_direction_id", nullable = false)
+    private SubjectInDirection subjectInDirection;
 
     @Column(name = "created_at", updatable = false)
     private LocalDateTime createdAt;

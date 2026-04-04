@@ -9,4 +9,6 @@ public interface ScheduleAuthorizationService {
     void ensureCanViewTeacherSchedule(String email, Long teacherUserId);
 
     void ensureCanViewScheduleEntry(String email, Long scheduleId);
+
+    void ensureCanViewClassroomSchedule(String email, Long classroomId);
 }

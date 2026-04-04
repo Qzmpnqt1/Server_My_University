@@ -26,9 +26,10 @@ public class UserController {
             @RequestParam(required = false) Long universityId,
             @RequestParam(required = false) Long instituteId,
             @RequestParam(required = false) Long groupId,
+            @RequestParam(required = false, name = "q") String searchQuery,
             Principal principal) {
         return ResponseEntity.ok(userService.getAllUsers(userType, isActive, universityId, instituteId, groupId,
-                principal.getName()));
+                searchQuery, principal.getName()));
     }
 
     /** Только числовой id, иначе перехватываются пути вроде /chat-contacts */

@@ -29,4 +29,7 @@ public interface UniversityScopeService {
     void assertUniversityMatches(Long universityId, Long adminUniversityId);
 
     void assertRegistrationRequestInUniversity(Long requestId, Long universityId);
+
+    /** Преподаватель относится к вузу по профилю/институту или фигурирует в расписании групп этого вуза. */
+    boolean teacherUserInUniversity(Long teacherUserId, Long universityId);
 }

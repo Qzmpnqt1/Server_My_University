@@ -7,6 +7,7 @@ import org.example.model.*;
 import org.example.repository.*;
 import org.example.service.ScheduleAuthorizationService;
 import org.example.service.UniversityScopeService;
+import org.example.service.ViewerUniversityResolver;
 import org.springframework.stereotype.Service;
 
 @Service
@@ -15,11 +16,9 @@ public class ScheduleAuthorizationServiceImpl implements ScheduleAuthorizationSe
 
     private final UsersRepository usersRepository;
     private final UniversityScopeService universityScopeService;
+    private final ViewerUniversityResolver viewerUniversityResolver;
     private final StudentProfileRepository studentProfileRepository;
-    private final TeacherProfileRepository teacherProfileRepository;
     private final ScheduleRepository scheduleRepository;
-    private final AcademicGroupRepository academicGroupRepository;
-    private final TeacherSubjectRepository teacherSubjectRepository;
 
     @Override
     public void ensureAdmin(String email) {
@@ -37,27 +36,10 @@ public class ScheduleAuthorizationServiceImpl implements ScheduleAuthorizationSe
             universityScopeService.assertAcademicGroupInUniversity(groupId, uni);
             return;
         }
-        if (u.getUserType() == UserType.STUDENT) {
-            StudentProfile sp = studentProfileRepository.findFetchedByUserId(u.getId())
-                    .orElseThrow(() -> new ResourceNotFoundException("Профиль студента не найден"));
-            if (!sp.getGroup().getId().equals(groupId)) {
-                throw new AccessDeniedException("Нет доступа к расписанию этой группы");
-            }
+        if (u.getUserType() == UserType.STUDENT || u.getUserType() == UserType.TEACHER) {
+            long viewerUni = viewerUniversityResolver.requireUniversityIdForEmail(email);
+            universityScopeService.assertAcademicGroupInUniversity(groupId, viewerUni);
             return;
-        }
-        if (u.getUserType() == UserType.TEACHER) {
-            if (scheduleRepository.existsByTeacher_IdAndGroup_Id(u.getId(), groupId)) {
-                return;
-            }
-            TeacherProfile tp = teacherProfileRepository.findByUserId(u.getId())
-                    .orElseThrow(() -> new ResourceNotFoundException("Профиль преподавателя не найден"));
-            AcademicGroup group = academicGroupRepository.findById(groupId)
-                    .orElseThrow(() -> new ResourceNotFoundException("Группа не найдена"));
-            Long directionId = group.getDirection().getId();
-            if (teacherSubjectRepository.teacherTeachesInDirection(tp.getId(), directionId)) {
-                return;
-            }
-            throw new AccessDeniedException("Нет доступа к расписанию этой группы");
         }
         throw new AccessDeniedException("Расписание недоступно");
     }
@@ -67,13 +49,35 @@ public class ScheduleAuthorizationServiceImpl implements ScheduleAuthorizationSe
         Users u = loadUser(email);
         if (u.getUserType() == UserType.ADMIN) {
             Long uni = universityScopeService.requireAdminUniversityId(email);
-            universityScopeService.assertUserInUniversity(teacherUserId, uni);
+            if (!universityScopeService.teacherUserInUniversity(teacherUserId, uni)) {
+                throw new AccessDeniedException("Преподаватель не относится к вашему вузу");
+            }
             return;
         }
-        if (u.getUserType() == UserType.TEACHER && u.getId().equals(teacherUserId)) {
+        if (u.getUserType() == UserType.STUDENT || u.getUserType() == UserType.TEACHER) {
+            long viewerUni = viewerUniversityResolver.requireUniversityIdForEmail(email);
+            if (!universityScopeService.teacherUserInUniversity(teacherUserId, viewerUni)) {
+                throw new AccessDeniedException("Нет доступа к расписанию этого преподавателя");
+            }
             return;
         }
         throw new AccessDeniedException("Нет доступа к расписанию этого преподавателя");
+    }
+
+    @Override
+    public void ensureCanViewClassroomSchedule(String email, Long classroomId) {
+        Users u = loadUser(email);
+        if (u.getUserType() == UserType.ADMIN) {
+            Long uni = universityScopeService.requireAdminUniversityId(email);
+            universityScopeService.assertClassroomInUniversity(classroomId, uni);
+            return;
+        }
+        if (u.getUserType() == UserType.STUDENT || u.getUserType() == UserType.TEACHER) {
+            long viewerUni = viewerUniversityResolver.requireUniversityIdForEmail(email);
+            universityScopeService.assertClassroomInUniversity(classroomId, viewerUni);
+            return;
+        }
+        throw new AccessDeniedException("Расписание аудитории недоступно");
     }
 
     @Override
