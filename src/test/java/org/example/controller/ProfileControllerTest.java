@@ -74,6 +74,7 @@ class ProfileControllerTest {
                 .studentProfile(UserProfileResponse.StudentProfileInfo.builder()
                         .groupId(1L)
                         .groupName("ИТ-101")
+                        .course(2)
                         .instituteId(1L)
                         .instituteName("Институт информатики")
                         .build())
@@ -87,7 +88,8 @@ class ProfileControllerTest {
                 .andExpect(jsonPath("$.email").value("student@test.ru"))
                 .andExpect(jsonPath("$.firstName").value("Иван"))
                 .andExpect(jsonPath("$.userType").value("STUDENT"))
-                .andExpect(jsonPath("$.studentProfile.groupName").value("ИТ-101"));
+                .andExpect(jsonPath("$.studentProfile.groupName").value("ИТ-101"))
+                .andExpect(jsonPath("$.studentProfile.course").value(2));
     }
 
     @Test

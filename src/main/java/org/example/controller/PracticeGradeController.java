@@ -4,6 +4,7 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.example.dto.request.PracticeGradeRequest;
 import org.example.dto.response.PracticeGradeResponse;
+import org.example.dto.response.StudentPracticeSlotResponse;
 import org.example.service.PracticeGradeService;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -19,6 +20,18 @@ import java.util.List;
 public class PracticeGradeController {
 
     private final PracticeGradeService practiceGradeService;
+
+    /**
+     * Полные слоты практик по дисциплине (включая неоценённые) — для зачётной книжки студента.
+     */
+    @GetMapping("/my/subject/{subjectDirectionId}/slots")
+    @PreAuthorize("hasRole('STUDENT')")
+    public ResponseEntity<List<StudentPracticeSlotResponse>> getMyPracticeSlotsForSubject(
+            Principal principal,
+            @PathVariable Long subjectDirectionId) {
+        return ResponseEntity.ok(practiceGradeService.getMyPracticeSlotsForSubject(
+                principal.getName(), subjectDirectionId));
+    }
 
     @GetMapping("/my")
     @PreAuthorize("hasRole('STUDENT')")

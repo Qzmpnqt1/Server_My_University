@@ -10,4 +10,6 @@ import java.util.List;
 public interface SubjectPracticeRepository extends JpaRepository<SubjectPractice, Long> {
 
     List<SubjectPractice> findBySubjectDirectionId(Long subjectDirectionId);
+
+    long countBySubjectDirectionId(Long subjectDirectionId);
 }

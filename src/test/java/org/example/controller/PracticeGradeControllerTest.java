@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import org.example.config.SecurityConfig;
 import org.example.dto.request.PracticeGradeRequest;
 import org.example.dto.response.PracticeGradeResponse;
+import org.example.dto.response.StudentPracticeSlotResponse;
 import org.example.exception.AccessDeniedException;
 import org.example.exception.BadRequestException;
 import org.example.exception.ConflictException;
@@ -52,6 +53,37 @@ class PracticeGradeControllerTest {
                 .id(1L).studentId(3L).studentName("Иванов Иван")
                 .practiceId(1L).practiceTitle("Лабораторная 1").practiceNumber(1)
                 .grade(8).creditStatus(null).maxGrade(10).practiceIsCredit(false).build();
+    }
+
+    // ── GET /my/subject/{id}/slots — STUDENT only ────────────────
+
+    @Test
+    @DisplayName("GET /practice-grades/my/subject/1/slots — student sees slots")
+    void getMySlots_Student_200() throws Exception {
+        mockAuth("s-token", "student@uni.ru", "STUDENT");
+        StudentPracticeSlotResponse slot = StudentPracticeSlotResponse.builder()
+                .practiceId(1L).practiceNumber(1).practiceTitle("Лаб 1")
+                .maxGrade(10).isCredit(false).grade(8).creditStatus(null).hasResult(true)
+                .build();
+        when(practiceGradeService.getMyPracticeSlotsForSubject(eq("student@uni.ru"), eq(1L)))
+                .thenReturn(List.of(slot));
+
+        mockMvc.perform(get("/api/v1/practice-grades/my/subject/1/slots")
+                        .header("Authorization", "Bearer s-token"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].practiceTitle").value("Лаб 1"))
+                .andExpect(jsonPath("$[0].hasResult").value(true));
+
+        verify(practiceGradeService).getMyPracticeSlotsForSubject("student@uni.ru", 1L);
+    }
+
+    @Test
+    @DisplayName("GET /practice-grades/my/subject/1/slots — teacher 403")
+    void getMySlots_Teacher_403() throws Exception {
+        mockAuth("t-token", "teacher@uni.ru", "TEACHER");
+        mockMvc.perform(get("/api/v1/practice-grades/my/subject/1/slots")
+                        .header("Authorization", "Bearer t-token"))
+                .andExpect(status().isForbidden());
     }
 
     // ── GET /my — STUDENT only ───────────────────────────────────

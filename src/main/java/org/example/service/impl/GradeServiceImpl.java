@@ -19,10 +19,12 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 @Service
@@ -55,9 +57,26 @@ public class GradeServiceImpl implements GradeService {
             throw new AccessDeniedException("Только студенты могут просматривать свои оценки");
         }
 
-        return gradeRepository.findByStudentId(user.getId()).stream()
-                .map(this::mapToResponse)
+        List<Grade> grades = gradeRepository.findByStudentId(user.getId());
+        if (grades.isEmpty()) {
+            return List.of();
+        }
+        Map<Long, Integer> practiceCounts = buildPracticeCountMap(
+                grades.stream().map(g -> g.getSubjectDirection().getId()).collect(Collectors.toSet()));
+        return grades.stream()
+                .map(g -> mapToResponse(g, practiceCounts.getOrDefault(g.getSubjectDirection().getId(), 0)))
                 .collect(Collectors.toList());
+    }
+
+    private Map<Long, Integer> buildPracticeCountMap(Set<Long> subjectDirectionIds) {
+        if (subjectDirectionIds.isEmpty()) {
+            return Map.of();
+        }
+        Map<Long, Integer> out = new HashMap<>();
+        for (Long id : subjectDirectionIds) {
+            out.put(id, (int) subjectPracticeRepository.countBySubjectDirectionId(id));
+        }
+        return out;
     }
 
     @Override
@@ -81,8 +100,14 @@ public class GradeServiceImpl implements GradeService {
             universityScopeService.assertUserInUniversity(studentId, uni);
         }
 
-        return gradeRepository.findByStudentId(studentId).stream()
-                .map(this::mapToResponse)
+        List<Grade> list = gradeRepository.findByStudentId(studentId);
+        if (list.isEmpty()) {
+            return List.of();
+        }
+        Map<Long, Integer> practiceCounts = buildPracticeCountMap(
+                list.stream().map(g -> g.getSubjectDirection().getId()).collect(Collectors.toSet()));
+        return list.stream()
+                .map(g -> mapToResponse(g, practiceCounts.getOrDefault(g.getSubjectDirection().getId(), 0)))
                 .collect(Collectors.toList());
     }
 
@@ -106,8 +131,10 @@ public class GradeServiceImpl implements GradeService {
             universityScopeService.assertSubjectDirectionInUniversity(subjectDirectionId, uni);
         }
 
-        return gradeRepository.findBySubjectDirectionId(subjectDirectionId).stream()
-                .map(this::mapToResponse)
+        List<Grade> list = gradeRepository.findBySubjectDirectionId(subjectDirectionId);
+        int pc = (int) subjectPracticeRepository.countBySubjectDirectionId(subjectDirectionId);
+        return list.stream()
+                .map(g -> mapToResponse(g, pc))
                 .collect(Collectors.toList());
     }
 
@@ -137,6 +164,7 @@ public class GradeServiceImpl implements GradeService {
         }
 
         List<SubjectPractice> practices = subjectPracticeRepository.findBySubjectDirectionId(subjectDirectionId);
+        int practiceCountForGrades = (int) subjectPracticeRepository.countBySubjectDirectionId(subjectDirectionId);
         List<TeacherJournalResponse.StudentRow> rows = new ArrayList<>();
         for (StudentProfile sp : byUser.values()) {
             Users st = sp.getUser();
@@ -145,7 +173,7 @@ public class GradeServiceImpl implements GradeService {
                 name += " " + st.getMiddleName();
             }
             GradeResponse finalG = gradeRepository.findByStudentIdAndSubjectDirectionId(st.getId(), subjectDirectionId)
-                    .map(this::mapToResponse)
+                    .map(g -> mapToResponse(g, practiceCountForGrades))
                     .orElse(null);
             List<PracticeGradeResponse> pRows = new ArrayList<>();
             for (SubjectPractice pr : practices) {
@@ -329,6 +357,11 @@ public class GradeServiceImpl implements GradeService {
     }
 
     private GradeResponse mapToResponse(Grade grade) {
+        int pc = (int) subjectPracticeRepository.countBySubjectDirectionId(grade.getSubjectDirection().getId());
+        return mapToResponse(grade, pc);
+    }
+
+    private GradeResponse mapToResponse(Grade grade, int practiceCount) {
         Users student = grade.getStudent();
         SubjectInDirection sid = grade.getSubjectDirection();
 
@@ -340,6 +373,9 @@ public class GradeServiceImpl implements GradeService {
         FinalAssessmentType fat = sid.getFinalAssessmentType() != null
                 ? sid.getFinalAssessmentType()
                 : FinalAssessmentType.EXAM;
+        StudyDirection direction = sid.getDirection();
+        String directionName = direction != null ? direction.getName() : null;
+
         return GradeResponse.builder()
                 .id(grade.getId())
                 .studentId(student.getId())
@@ -349,6 +385,10 @@ public class GradeServiceImpl implements GradeService {
                 .grade(grade.getGrade())
                 .creditStatus(grade.getCreditStatus())
                 .finalAssessmentType(fat.name())
+                .course(sid.getCourse())
+                .semester(sid.getSemester())
+                .directionName(directionName)
+                .practiceCount(practiceCount)
                 .build();
     }
 }

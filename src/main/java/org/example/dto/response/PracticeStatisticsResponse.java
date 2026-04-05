@@ -7,6 +7,11 @@ import lombok.NoArgsConstructor;
 
 import java.util.List;
 
+/**
+ * Агрегаты по практикам дисциплины (привязка к subject_direction_id).
+ * <p>{@code overallProgress} и {@code completionPercentage} — одно и то же значение в диапазоне 0–100
+ * (доля практик, по которым у студентов есть итоговый результат); поля продублированы для совместимости клиентов.</p>
+ */
 @Data
 @Builder
 @NoArgsConstructor

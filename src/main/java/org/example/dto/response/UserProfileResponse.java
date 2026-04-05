@@ -34,6 +34,8 @@ public class UserProfileResponse {
     public static class StudentProfileInfo {
         private Long groupId;
         private String groupName;
+        /** Курс обучения (как у академической группы: 1, 2, 3, …). */
+        private Integer course;
         private Long instituteId;
         private String instituteName;
     }

@@ -20,4 +20,14 @@ public class GradeResponse {
     private Boolean creditStatus;
     /** EXAM — числовая итоговая оценка; CREDIT — зачёт/незачёт */
     private String finalAssessmentType;
+
+    /** Курс и семестр дисциплины в направлении (для группировки в зачётке). */
+    private Integer course;
+    private Integer semester;
+
+    /** Название направления подготовки. */
+    private String directionName;
+
+    /** Число практик, заведённых по дисциплине в направлении. */
+    private Integer practiceCount;
 }

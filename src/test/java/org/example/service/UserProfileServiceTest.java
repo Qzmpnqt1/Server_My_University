@@ -116,6 +116,7 @@ class UserProfileServiceTest {
         assertNotNull(response.getStudentProfile());
         assertEquals(1L, response.getStudentProfile().getGroupId());
         assertEquals("ИТ-101", response.getStudentProfile().getGroupName());
+        assertEquals(2, response.getStudentProfile().getCourse());
         assertEquals(1L, response.getStudentProfile().getInstituteId());
         assertEquals("Институт информатики", response.getStudentProfile().getInstituteName());
 

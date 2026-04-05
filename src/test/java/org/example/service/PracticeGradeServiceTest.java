@@ -2,6 +2,7 @@ package org.example.service;
 
 import org.example.dto.request.PracticeGradeRequest;
 import org.example.dto.response.PracticeGradeResponse;
+import org.example.dto.response.StudentPracticeSlotResponse;
 import org.example.exception.AccessDeniedException;
 import org.example.exception.BadRequestException;
 import org.example.exception.ConflictException;
@@ -134,6 +135,40 @@ class PracticeGradeServiceTest {
         when(usersRepository.findByEmail("teacher@test.ru")).thenReturn(Optional.of(teacherUser));
         assertThrows(AccessDeniedException.class,
                 () -> practiceGradeService.getMyPracticeGrades("teacher@test.ru", null));
+    }
+
+    // ── getMyPracticeSlotsForSubject ─────────────────────────────
+
+    @Test
+    @DisplayName("Student receives full practice slots for own direction subject")
+    void getMyPracticeSlots_ok() {
+        when(usersRepository.findByEmail("student@test.ru")).thenReturn(Optional.of(studentUser));
+        when(subjectInDirectionRepository.findById(1L)).thenReturn(Optional.of(subjectInDirection));
+        when(subjectPracticeRepository.findBySubjectDirectionId(1L)).thenReturn(List.of(practice, creditPractice));
+        when(practiceGradeRepository.findByStudentIdAndPracticeIdIn(eq(3L), anyList()))
+                .thenReturn(List.of(samplePracticeGrade()));
+
+        List<StudentPracticeSlotResponse> slots =
+                practiceGradeService.getMyPracticeSlotsForSubject("student@test.ru", 1L);
+
+        assertEquals(2, slots.size());
+        assertEquals(1L, slots.get(0).getPracticeId());
+        assertTrue(slots.get(0).isHasResult());
+        assertEquals(2L, slots.get(1).getPracticeId());
+        assertFalse(slots.get(1).isHasResult());
+    }
+
+    @Test
+    @DisplayName("Student cannot load slots for subject from another direction")
+    void getMyPracticeSlots_wrongDirection() {
+        StudyDirection otherDir = StudyDirection.builder().id(99L).name("Другое").build();
+        SubjectInDirection otherSid = SubjectInDirection.builder()
+                .id(2L).subject(subject).direction(otherDir).course(1).semester(1).build();
+        when(usersRepository.findByEmail("student@test.ru")).thenReturn(Optional.of(studentUser));
+        when(subjectInDirectionRepository.findById(2L)).thenReturn(Optional.of(otherSid));
+
+        assertThrows(AccessDeniedException.class,
+                () -> practiceGradeService.getMyPracticeSlotsForSubject("student@test.ru", 2L));
     }
 
     // ── getByPractice ────────────────────────────────────────────

@@ -3,6 +3,7 @@ package org.example.service.impl;
 import lombok.RequiredArgsConstructor;
 import org.example.dto.request.PracticeGradeRequest;
 import org.example.dto.response.PracticeGradeResponse;
+import org.example.dto.response.StudentPracticeSlotResponse;
 import org.example.exception.AccessDeniedException;
 import org.example.exception.BadRequestException;
 import org.example.exception.ConflictException;
@@ -16,7 +17,10 @@ import org.example.service.UniversityScopeService;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
+import java.util.Map;
 import java.util.stream.Collectors;
 
 @Service
@@ -64,6 +68,82 @@ public class PracticeGradeServiceImpl implements PracticeGradeService {
         return practiceGradeRepository.findByStudentId(user.getId()).stream()
                 .map(this::mapToResponse)
                 .collect(Collectors.toList());
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<StudentPracticeSlotResponse> getMyPracticeSlotsForSubject(String email, Long subjectDirectionId) {
+        Users user = usersRepository.findByEmail(email)
+                .orElseThrow(() -> new ResourceNotFoundException("Пользователь не найден"));
+        if (user.getUserType() != UserType.STUDENT) {
+            throw new AccessDeniedException("Только студенты могут просматривать слоты практик");
+        }
+        SubjectInDirection sid = subjectInDirectionRepository.findById(subjectDirectionId)
+                .orElseThrow(() -> new ResourceNotFoundException("Предмет в направлении не найден"));
+        assertStudentOwnsSubjectDirection(user, sid);
+
+        List<SubjectPractice> practices = new ArrayList<>(
+                subjectPracticeRepository.findBySubjectDirectionId(subjectDirectionId));
+        practices.sort(Comparator.comparing(SubjectPractice::getPracticeNumber,
+                Comparator.nullsLast(Comparator.naturalOrder())));
+
+        if (practices.isEmpty()) {
+            return List.of();
+        }
+        List<Long> practiceIds = practices.stream().map(SubjectPractice::getId).collect(Collectors.toList());
+        List<PracticeGrade> existing = practiceGradeRepository.findByStudentIdAndPracticeIdIn(
+                user.getId(), practiceIds);
+        Map<Long, PracticeGrade> byPracticeId = existing.stream()
+                .collect(Collectors.toMap(pg -> pg.getPractice().getId(), pg -> pg, (a, b) -> a));
+
+        List<StudentPracticeSlotResponse> out = new ArrayList<>(practices.size());
+        for (SubjectPractice pr : practices) {
+            PracticeGrade pg = byPracticeId.get(pr.getId());
+            out.add(mapStudentSlot(pr, pg));
+        }
+        return out;
+    }
+
+    private void assertStudentOwnsSubjectDirection(Users student, SubjectInDirection sid) {
+        StudentProfile sp = studentProfileRepository.findFetchedByUserId(student.getId())
+                .orElseThrow(() -> new BadRequestException("Профиль студента не найден"));
+        if (!sp.getGroup().getDirection().getId().equals(sid.getDirection().getId())) {
+            throw new AccessDeniedException("Нет доступа к практикам этой дисциплины");
+        }
+    }
+
+    private StudentPracticeSlotResponse mapStudentSlot(SubjectPractice pr, PracticeGrade pg) {
+        Integer grade = pg != null ? pg.getGrade() : null;
+        Boolean creditStatus = pg != null ? pg.getCreditStatus() : null;
+        boolean hasResult = computePracticeHasResult(pr, pg);
+        return StudentPracticeSlotResponse.builder()
+                .practiceId(pr.getId())
+                .practiceNumber(pr.getPracticeNumber())
+                .practiceTitle(pr.getPracticeTitle())
+                .maxGrade(pr.getMaxGrade())
+                .isCredit(pr.getIsCredit())
+                .grade(grade)
+                .creditStatus(creditStatus)
+                .hasResult(hasResult)
+                .build();
+    }
+
+    private boolean computePracticeHasResult(SubjectPractice pr, PracticeGrade pg) {
+        if (pg == null) {
+            return false;
+        }
+        if (Boolean.TRUE.equals(pr.getIsCredit())) {
+            return pg.getCreditStatus() != null;
+        }
+        if (pg.getGrade() == null) {
+            return false;
+        }
+        int g = pg.getGrade();
+        Integer max = pr.getMaxGrade();
+        if (max != null) {
+            return g >= 0 && g <= max;
+        }
+        return g >= 2 && g <= 5;
     }
 
     @Override

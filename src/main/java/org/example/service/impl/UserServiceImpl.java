@@ -176,6 +176,7 @@ public class UserServiceImpl implements UserService {
                     builder.studentProfile(UserProfileResponse.StudentProfileInfo.builder()
                             .groupId(profile.getGroup().getId())
                             .groupName(profile.getGroup().getName())
+                            .course(profile.getGroup().getCourse())
                             .instituteId(profile.getInstitute().getId())
                             .instituteName(profile.getInstitute().getName())
                             .build()));
