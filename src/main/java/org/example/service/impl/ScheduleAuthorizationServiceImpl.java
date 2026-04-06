@@ -23,7 +23,7 @@ public class ScheduleAuthorizationServiceImpl implements ScheduleAuthorizationSe
     @Override
     public void ensureAdmin(String email) {
         Users u = loadUser(email);
-        if (u.getUserType() != UserType.ADMIN) {
+        if (u.getUserType() != UserType.ADMIN && u.getUserType() != UserType.SUPER_ADMIN) {
             throw new AccessDeniedException("Требуются права администратора");
         }
     }
@@ -31,8 +31,11 @@ public class ScheduleAuthorizationServiceImpl implements ScheduleAuthorizationSe
     @Override
     public void ensureCanViewGroupSchedule(String email, Long groupId) {
         Users u = loadUser(email);
+        if (u.getUserType() == UserType.SUPER_ADMIN) {
+            return;
+        }
         if (u.getUserType() == UserType.ADMIN) {
-            Long uni = universityScopeService.requireAdminUniversityId(email);
+            Long uni = universityScopeService.requireCampusUniversityId(email);
             universityScopeService.assertAcademicGroupInUniversity(groupId, uni);
             return;
         }
@@ -47,8 +50,11 @@ public class ScheduleAuthorizationServiceImpl implements ScheduleAuthorizationSe
     @Override
     public void ensureCanViewTeacherSchedule(String email, Long teacherUserId) {
         Users u = loadUser(email);
+        if (u.getUserType() == UserType.SUPER_ADMIN) {
+            return;
+        }
         if (u.getUserType() == UserType.ADMIN) {
-            Long uni = universityScopeService.requireAdminUniversityId(email);
+            Long uni = universityScopeService.requireCampusUniversityId(email);
             if (!universityScopeService.teacherUserInUniversity(teacherUserId, uni)) {
                 throw new AccessDeniedException("Преподаватель не относится к вашему вузу");
             }
@@ -67,8 +73,11 @@ public class ScheduleAuthorizationServiceImpl implements ScheduleAuthorizationSe
     @Override
     public void ensureCanViewClassroomSchedule(String email, Long classroomId) {
         Users u = loadUser(email);
+        if (u.getUserType() == UserType.SUPER_ADMIN) {
+            return;
+        }
         if (u.getUserType() == UserType.ADMIN) {
-            Long uni = universityScopeService.requireAdminUniversityId(email);
+            Long uni = universityScopeService.requireCampusUniversityId(email);
             universityScopeService.assertClassroomInUniversity(classroomId, uni);
             return;
         }
@@ -85,8 +94,11 @@ public class ScheduleAuthorizationServiceImpl implements ScheduleAuthorizationSe
         Users u = loadUser(email);
         Schedule s = scheduleRepository.findById(scheduleId)
                 .orElseThrow(() -> new ResourceNotFoundException("Запись расписания не найдена"));
+        if (u.getUserType() == UserType.SUPER_ADMIN) {
+            return;
+        }
         if (u.getUserType() == UserType.ADMIN) {
-            Long uni = universityScopeService.requireAdminUniversityId(email);
+            Long uni = universityScopeService.requireCampusUniversityId(email);
             universityScopeService.assertAcademicGroupInUniversity(s.getGroup().getId(), uni);
             return;
         }

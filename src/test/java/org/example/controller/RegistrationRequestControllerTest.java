@@ -82,7 +82,7 @@ class RegistrationRequestControllerTest {
                 .createdAt(LocalDateTime.of(2025, 6, 1, 10, 0))
                 .build();
 
-        when(registrationService.getAllRequests(isNull(), isNull(), isNull(), eq("admin@uni.ru")))
+        when(registrationService.getAllRequests(isNull(), isNull(), isNull(), isNull(), eq("admin@uni.ru")))
                 .thenReturn(List.of(rr));
 
         mockMvc.perform(get("/api/v1/registration-requests")
@@ -98,7 +98,7 @@ class RegistrationRequestControllerTest {
     void getAllRequests_FilterByStatus_200() throws Exception {
         mockAdminAuth();
 
-        when(registrationService.getAllRequests(eq(RegistrationStatus.PENDING), isNull(), isNull(), eq("admin@uni.ru")))
+        when(registrationService.getAllRequests(eq(RegistrationStatus.PENDING), isNull(), isNull(), isNull(), eq("admin@uni.ru")))
                 .thenReturn(List.of());
 
         mockMvc.perform(get("/api/v1/registration-requests")
@@ -107,7 +107,7 @@ class RegistrationRequestControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$").isArray());
 
-        verify(registrationService).getAllRequests(RegistrationStatus.PENDING, null, null, "admin@uni.ru");
+        verify(registrationService).getAllRequests(RegistrationStatus.PENDING, null, null, null, "admin@uni.ru");
     }
 
     @Test

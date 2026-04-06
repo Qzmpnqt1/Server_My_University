@@ -16,8 +16,13 @@ public interface TeacherSubjectRepository extends JpaRepository<TeacherSubject, 
 
     List<TeacherSubject> findByTeacherId(Long teacherId);
 
-    @Query("SELECT ts FROM TeacherSubject ts JOIN ts.teacher t JOIN t.institute i WHERE i.university.id = :uniId")
-    List<TeacherSubject> findByTeacherInstituteUniversityId(@Param("uniId") Long universityId);
+    @Query("""
+            SELECT ts FROM TeacherSubject ts
+            JOIN ts.teacher t
+            WHERE (t.university IS NOT NULL AND t.university.id = :uniId)
+               OR (t.institute IS NOT NULL AND t.institute.university.id = :uniId)
+            """)
+    List<TeacherSubject> findByTeacherInUniversityId(@Param("uniId") Long universityId);
 
     boolean existsByTeacherIdAndSubjectInDirection_Id(Long teacherId, Long subjectInDirectionId);
 
@@ -29,6 +34,16 @@ public interface TeacherSubjectRepository extends JpaRepository<TeacherSubject, 
             """)
     boolean teacherTeachesInDirection(@Param("teacherProfileId") Long teacherProfileId,
                                       @Param("directionId") Long directionId);
+
+    @Query("""
+            SELECT CASE WHEN COUNT(ts) > 0 THEN true ELSE false END
+            FROM TeacherSubject ts
+            JOIN ts.subjectInDirection sid
+            JOIN sid.direction d
+            WHERE ts.teacher.id = :teacherProfileId AND d.institute.id = :instituteId
+            """)
+    boolean teacherTeachesInInstitute(@Param("teacherProfileId") Long teacherProfileId,
+                                      @Param("instituteId") Long instituteId);
 
     @Query("""
             SELECT DISTINCT i FROM TeacherSubject ts

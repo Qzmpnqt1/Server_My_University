@@ -77,7 +77,8 @@ class GradeServiceTest {
         lenient().when(studentProfileRepository.findFetchedByUserId(3L)).thenReturn(Optional.of(studentProfile));
 
         lenient().doNothing().when(notificationService).notifyGradeChanged(anyLong(), anyString(), anyBoolean());
-        lenient().when(universityScopeService.requireAdminUniversityId("admin@test.ru")).thenReturn(1L);
+        lenient().when(universityScopeService.requireCampusUniversityId("admin@test.ru")).thenReturn(1L);
+        lenient().doNothing().when(universityScopeService).requireAdminOrSuperAdmin("admin@test.ru");
         lenient().doNothing().when(universityScopeService).assertUserInUniversity(anyLong(), eq(1L));
         lenient().doNothing().when(universityScopeService).assertSubjectDirectionInUniversity(anyLong(), eq(1L));
     }

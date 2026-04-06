@@ -13,6 +13,7 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.security.crypto.password.PasswordEncoder;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -38,6 +39,12 @@ class UserServiceTest {
     private AdminProfileRepository adminProfileRepository;
 
     @Mock
+    private UniversityRepository universityRepository;
+
+    @Mock
+    private PasswordEncoder passwordEncoder;
+
+    @Mock
     private AuditService auditService;
 
     @Mock
@@ -48,7 +55,9 @@ class UserServiceTest {
 
     @BeforeEach
     void universityScopeLenient() {
-        lenient().when(universityScopeService.requireAdminUniversityId(anyString())).thenReturn(1L);
+        lenient().when(universityScopeService.requireCampusUniversityId(anyString())).thenReturn(1L);
+        lenient().doNothing().when(universityScopeService).requireAdminOrSuperAdmin(anyString());
+        lenient().when(universityScopeService.isSuperAdmin(anyString())).thenReturn(false);
         lenient().doNothing().when(universityScopeService).assertUserInUniversity(anyLong(), anyLong());
     }
 

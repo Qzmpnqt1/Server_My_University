@@ -111,7 +111,8 @@ class RegistrationServiceTest {
                 .userType(UserType.ADMIN)
                 .build();
         lenient().when(usersRepository.findByEmail("admin@uni.ru")).thenReturn(Optional.of(scopeAdmin));
-        lenient().when(universityScopeService.requireAdminUniversityId("admin@uni.ru")).thenReturn(1L);
+        lenient().doNothing().when(universityScopeService).requireAdminOrSuperAdmin("admin@uni.ru");
+        lenient().when(universityScopeService.requireCampusUniversityId("admin@uni.ru")).thenReturn(1L);
         lenient().doNothing().when(universityScopeService).assertRegistrationRequestInUniversity(anyLong(), eq(1L));
     }
 
@@ -142,7 +143,7 @@ class RegistrationServiceTest {
     }
 
     @Test
-    @DisplayName("Submit registration for teacher succeeds")
+    @DisplayName("Submit registration for teacher succeeds with university only")
     void submitRegistrationTeacher() {
         RegisterRequest request = RegisterRequest.builder()
                 .email("teacher@test.ru")
@@ -151,18 +152,39 @@ class RegistrationServiceTest {
                 .lastName("Сидорова")
                 .userType(UserType.TEACHER)
                 .universityId(1L)
-                .instituteId(1L)
                 .build();
 
         when(usersRepository.existsByEmail("teacher@test.ru")).thenReturn(false);
         when(registrationRequestRepository.existsByEmailAndStatus("teacher@test.ru", RegistrationStatus.PENDING))
                 .thenReturn(false);
         when(universityRepository.findById(1L)).thenReturn(Optional.of(testUniversity));
-        when(instituteRepository.findById(1L)).thenReturn(Optional.of(testInstitute));
         when(passwordEncoder.encode("password123")).thenReturn("$2a$10$hashed");
 
         assertDoesNotThrow(() -> registrationService.submitRegistration(request));
         verify(registrationRequestRepository).save(any(RegistrationRequest.class));
+        verify(instituteRepository, never()).findById(anyLong());
+    }
+
+    @Test
+    @DisplayName("Submit registration for teacher with groupId throws BadRequestException")
+    void submitRegistrationTeacherWithGroupForbidden() {
+        RegisterRequest request = RegisterRequest.builder()
+                .email("badteacher@test.ru")
+                .password("password123")
+                .firstName("Анна")
+                .lastName("Сидорова")
+                .userType(UserType.TEACHER)
+                .universityId(1L)
+                .groupId(1L)
+                .build();
+
+        when(usersRepository.existsByEmail("badteacher@test.ru")).thenReturn(false);
+        when(registrationRequestRepository.existsByEmailAndStatus("badteacher@test.ru", RegistrationStatus.PENDING))
+                .thenReturn(false);
+        when(universityRepository.findById(1L)).thenReturn(Optional.of(testUniversity));
+
+        assertThrows(BadRequestException.class, () -> registrationService.submitRegistration(request));
+        verify(registrationRequestRepository, never()).save(any());
     }
 
     @Test
@@ -288,7 +310,7 @@ class RegistrationServiceTest {
                 .thenReturn(List.of(rr));
 
         List<RegistrationRequestResponse> result =
-                registrationService.getAllRequests(null, null, null, "admin@uni.ru");
+                registrationService.getAllRequests(null, null, null, null, "admin@uni.ru");
         assertEquals(1, result.size());
         assertEquals("test@test.ru", result.get(0).getEmail());
     }
@@ -310,7 +332,7 @@ class RegistrationServiceTest {
                 .thenReturn(List.of(rr));
 
         List<RegistrationRequestResponse> result =
-                registrationService.getAllRequests(RegistrationStatus.PENDING, null, null, "admin@uni.ru");
+                registrationService.getAllRequests(RegistrationStatus.PENDING, null, null, null, "admin@uni.ru");
         assertEquals(1, result.size());
         verify(registrationRequestRepository).findAll(any(Specification.class), any(Sort.class));
     }
@@ -353,6 +375,44 @@ class RegistrationServiceTest {
         verify(registrationRequestRepository).save(regRequest);
         assertEquals(RegistrationStatus.APPROVED, regRequest.getStatus());
         verify(auditService).log(eq(99L), eq("APPROVE_REGISTRATION"), eq("RegistrationRequest"), eq(1L), anyString());
+    }
+
+    @Test
+    @DisplayName("Approve teacher request creates profile with university, institute null")
+    void approveTeacherRequest() {
+        RegistrationRequest regRequest = RegistrationRequest.builder()
+                .id(11L)
+                .email("tch@test.ru")
+                .passwordHash("$2a$10$hashed")
+                .firstName("Иван")
+                .lastName("Преподаватель")
+                .userType(UserType.TEACHER)
+                .status(RegistrationStatus.PENDING)
+                .university(testUniversity)
+                .group(null)
+                .institute(null)
+                .build();
+
+        Users savedUser = Users.builder()
+                .id(20L)
+                .email("tch@test.ru")
+                .passwordHash("$2a$10$hashed")
+                .firstName("Иван")
+                .lastName("Преподаватель")
+                .userType(UserType.TEACHER)
+                .isActive(true)
+                .build();
+
+        when(registrationRequestRepository.findById(11L)).thenReturn(Optional.of(regRequest));
+        when(usersRepository.existsByEmail("tch@test.ru")).thenReturn(false);
+        when(usersRepository.save(any(Users.class))).thenReturn(savedUser);
+
+        assertDoesNotThrow(() -> registrationService.approveRequest(11L, "admin@uni.ru"));
+
+        verify(teacherProfileRepository).save(argThat(tp ->
+                tp.getUniversity() != null && tp.getUniversity().getId().equals(1L) && tp.getInstitute() == null));
+        verify(studentProfileRepository, never()).save(any());
+        assertEquals(RegistrationStatus.APPROVED, regRequest.getStatus());
     }
 
     @Test

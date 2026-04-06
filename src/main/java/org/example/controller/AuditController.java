@@ -29,8 +29,11 @@ public class AuditController {
             @RequestParam(required = false) String entityType,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime from,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime to,
+            @RequestParam(required = false) Long universityId,
             Principal principal) {
-        Long uni = universityScopeService.requireAdminUniversityId(principal.getName());
-        return ResponseEntity.ok(auditService.search(userId, action, entityType, from, to, uni));
+        String email = principal.getName();
+        Long restrictUni = universityScopeService.isSuperAdmin(email) ? universityId
+                : universityScopeService.requireCampusUniversityId(email);
+        return ResponseEntity.ok(auditService.search(userId, action, entityType, from, to, restrictUni));
     }
 }

@@ -96,8 +96,10 @@ public class GradeServiceImpl implements GradeService {
                 throw new AccessDeniedException("Студент может просматривать только свои оценки");
             }
         } else if (currentUser.getUserType() == UserType.ADMIN) {
-            Long uni = universityScopeService.requireAdminUniversityId(email);
+            Long uni = universityScopeService.requireCampusUniversityId(email);
             universityScopeService.assertUserInUniversity(studentId, uni);
+        } else if (currentUser.getUserType() == UserType.SUPER_ADMIN) {
+            // глобальный просмотр
         }
 
         List<Grade> list = gradeRepository.findByStudentId(studentId);
@@ -127,8 +129,10 @@ public class GradeServiceImpl implements GradeService {
         if (user.getUserType() == UserType.TEACHER) {
             verifyTeacherOwnership(user, sid);
         } else if (user.getUserType() == UserType.ADMIN) {
-            Long uni = universityScopeService.requireAdminUniversityId(email);
+            Long uni = universityScopeService.requireCampusUniversityId(email);
             universityScopeService.assertSubjectDirectionInUniversity(subjectDirectionId, uni);
+        } else if (user.getUserType() != UserType.SUPER_ADMIN) {
+            throw new AccessDeniedException("Недостаточно прав");
         }
 
         List<Grade> list = gradeRepository.findBySubjectDirectionId(subjectDirectionId);
@@ -148,9 +152,9 @@ public class GradeServiceImpl implements GradeService {
         if (user.getUserType() == UserType.TEACHER) {
             verifyTeacherOwnership(user, sid);
         } else if (user.getUserType() == UserType.ADMIN) {
-            Long uni = universityScopeService.requireAdminUniversityId(email);
+            Long uni = universityScopeService.requireCampusUniversityId(email);
             universityScopeService.assertSubjectDirectionInUniversity(subjectDirectionId, uni);
-        } else {
+        } else if (user.getUserType() != UserType.SUPER_ADMIN) {
             throw new AccessDeniedException("Недостаточно прав для просмотра журнала");
         }
 
@@ -211,12 +215,16 @@ public class GradeServiceImpl implements GradeService {
         SubjectInDirection sid = subjectInDirectionRepository.findById(request.getSubjectDirectionId())
                 .orElseThrow(() -> new ResourceNotFoundException("Предмет в направлении не найден"));
 
-        if (currentUser.getUserType() != UserType.ADMIN) {
+        if (currentUser.getUserType() == UserType.TEACHER) {
             verifyTeacherOwnership(currentUser, sid);
-        } else {
-            Long uni = universityScopeService.requireAdminUniversityId(email);
-            universityScopeService.assertUserInUniversity(request.getStudentId(), uni);
+        } else if (currentUser.getUserType() == UserType.ADMIN
+                || currentUser.getUserType() == UserType.SUPER_ADMIN) {
+            Long uni = sid.getDirection().getInstitute().getUniversity().getId();
+            universityScopeService.enforceAccessToEntityUniversity(email, uni);
             universityScopeService.assertSubjectDirectionInUniversity(request.getSubjectDirectionId(), uni);
+            universityScopeService.assertUserInUniversity(request.getStudentId(), uni);
+        } else {
+            throw new AccessDeniedException("Недостаточно прав");
         }
 
         assertStudentEligibleForSubjectDirection(student, sid, request.getGroupId());
@@ -253,12 +261,17 @@ public class GradeServiceImpl implements GradeService {
         Grade grade = gradeRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Оценка не найдена"));
 
-        if (currentUser.getUserType() != UserType.ADMIN) {
+        if (currentUser.getUserType() == UserType.TEACHER) {
             verifyTeacherOwnership(currentUser, grade.getSubjectDirection());
-        } else {
-            Long uni = universityScopeService.requireAdminUniversityId(email);
+        } else if (currentUser.getUserType() == UserType.ADMIN
+                || currentUser.getUserType() == UserType.SUPER_ADMIN) {
+            SubjectInDirection sid = grade.getSubjectDirection();
+            Long uni = sid.getDirection().getInstitute().getUniversity().getId();
+            universityScopeService.enforceAccessToEntityUniversity(email, uni);
             universityScopeService.assertUserInUniversity(grade.getStudent().getId(), uni);
             universityScopeService.assertSubjectDirectionInUniversity(grade.getSubjectDirection().getId(), uni);
+        } else {
+            throw new AccessDeniedException("Недостаточно прав");
         }
 
         assertStudentEligibleForSubjectDirection(grade.getStudent(), grade.getSubjectDirection(), request.getGroupId());

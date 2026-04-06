@@ -35,16 +35,21 @@ public class ScheduleCompareServiceImpl implements ScheduleCompareService {
     private final StudyDirectionRepository studyDirectionRepository;
     private final ClassroomRepository classroomRepository;
     private final TeacherProfileRepository teacherProfileRepository;
+    private final TeacherSubjectRepository teacherSubjectRepository;
 
     @Override
     public ScheduleCompareResultResponse compare(ScheduleCompareRequest request, String viewerEmail) {
-        long uni = viewerUniversityResolver.requireUniversityIdForEmail(viewerEmail);
         Users viewer = usersRepository.findByEmail(viewerEmail)
                 .orElseThrow(() -> new ResourceNotFoundException("Пользователь не найден"));
 
         ScheduleEntityKind leftKind;
         Long leftId;
+        final long uni;
         if (request.getMode() == ScheduleCompareRequest.ScheduleCompareMode.MY_WITH_OTHER) {
+            if (viewer.getUserType() == UserType.SUPER_ADMIN) {
+                throw new AccessDeniedException("Режим «с моим расписанием» недоступен для суперадминистратора");
+            }
+            uni = viewerUniversityResolver.requireUniversityIdForEmail(viewerEmail);
             if (viewer.getUserType() == UserType.STUDENT) {
                 StudentProfile sp = studentProfileRepository.findFetchedByUserId(viewer.getId())
                         .orElseThrow(() -> new ResourceNotFoundException("Профиль студента не найден"));
@@ -57,8 +62,16 @@ public class ScheduleCompareServiceImpl implements ScheduleCompareService {
                 throw new AccessDeniedException("Режим «с моим расписанием» доступен студентам и преподавателям");
             }
         } else {
-            if (viewer.getUserType() != UserType.ADMIN) {
+            if (viewer.getUserType() != UserType.ADMIN && viewer.getUserType() != UserType.SUPER_ADMIN) {
                 throw new AccessDeniedException("Полное сравнение доступно только администратору");
+            }
+            if (viewer.getUserType() == UserType.SUPER_ADMIN) {
+                if (request.getScopeUniversityId() == null) {
+                    throw new BadRequestException("Для суперадминистратора укажите scopeUniversityId (вуз сравнения)");
+                }
+                uni = request.getScopeUniversityId();
+            } else {
+                uni = viewerUniversityResolver.requireUniversityIdForEmail(viewerEmail);
             }
             leftKind = request.getLeftKind();
             leftId = request.getLeftId();
@@ -216,9 +229,21 @@ public class ScheduleCompareServiceImpl implements ScheduleCompareService {
         return n.trim();
     }
 
+    private long resolveCompareCatalogUniversity(String viewerEmail, Long queryUniversityId) {
+        Users viewer = usersRepository.findByEmail(viewerEmail)
+                .orElseThrow(() -> new ResourceNotFoundException("Пользователь не найден"));
+        if (viewer.getUserType() == UserType.SUPER_ADMIN) {
+            if (queryUniversityId == null) {
+                throw new BadRequestException("Укажите universityId для каталога сравнения");
+            }
+            return queryUniversityId;
+        }
+        return viewerUniversityResolver.requireUniversityIdForEmail(viewerEmail);
+    }
+
     @Override
-    public List<ScheduleCompareInstituteOptionResponse> listInstitutes(String viewerEmail) {
-        long uni = viewerUniversityResolver.requireUniversityIdForEmail(viewerEmail);
+    public List<ScheduleCompareInstituteOptionResponse> listInstitutes(String viewerEmail, Long universityId) {
+        long uni = resolveCompareCatalogUniversity(viewerEmail, universityId);
         log.debug("Schedule compare catalog institutes viewer={} uni={}", viewerEmail, uni);
         return instituteRepository.findByUniversityId(uni).stream()
                 .map(i -> ScheduleCompareInstituteOptionResponse.builder()
@@ -231,8 +256,9 @@ public class ScheduleCompareServiceImpl implements ScheduleCompareService {
     }
 
     @Override
-    public List<ScheduleCompareDirectionOptionResponse> listDirections(String viewerEmail, Long instituteId) {
-        long uni = viewerUniversityResolver.requireUniversityIdForEmail(viewerEmail);
+    public List<ScheduleCompareDirectionOptionResponse> listDirections(String viewerEmail, Long universityId,
+                                                                       Long instituteId) {
+        long uni = resolveCompareCatalogUniversity(viewerEmail, universityId);
         universityScopeService.assertInstituteInUniversity(instituteId, uni);
         return studyDirectionRepository.findByInstituteId(instituteId).stream()
                 .map(d -> ScheduleCompareDirectionOptionResponse.builder()
@@ -245,8 +271,9 @@ public class ScheduleCompareServiceImpl implements ScheduleCompareService {
     }
 
     @Override
-    public List<ScheduleCompareGroupOptionResponse> listGroups(String viewerEmail, Long instituteId, Long directionId, String q) {
-        long uni = viewerUniversityResolver.requireUniversityIdForEmail(viewerEmail);
+    public List<ScheduleCompareGroupOptionResponse> listGroups(String viewerEmail, Long universityId, Long instituteId,
+                                                               Long directionId, String q) {
+        long uni = resolveCompareCatalogUniversity(viewerEmail, universityId);
         String qq = (q == null || q.isBlank()) ? null : q.trim();
         if (instituteId != null) {
             universityScopeService.assertInstituteInUniversity(instituteId, uni);
@@ -265,8 +292,8 @@ public class ScheduleCompareServiceImpl implements ScheduleCompareService {
     }
 
     @Override
-    public List<ScheduleCompareTeacherOptionResponse> listTeachers(String viewerEmail, String q) {
-        long uni = viewerUniversityResolver.requireUniversityIdForEmail(viewerEmail);
+    public List<ScheduleCompareTeacherOptionResponse> listTeachers(String viewerEmail, Long universityId, String q) {
+        long uni = resolveCompareCatalogUniversity(viewerEmail, universityId);
         Set<Long> ids = new LinkedHashSet<>(teacherProfileRepository.findUserIdsByUniversityId(uni));
         ids.addAll(scheduleRepository.findDistinctTeacherUserIdsByUniversityId(uni));
         String qq = (q == null || q.isBlank()) ? null : q.trim().toLowerCase(Locale.ROOT);
@@ -280,10 +307,16 @@ public class ScheduleCompareServiceImpl implements ScheduleCompareService {
             String pos = null;
             var tp = teacherProfileRepository.findByUserId(u.getId());
             if (tp.isPresent()) {
-                if (tp.get().getInstitute() != null) {
-                    inst = tp.get().getInstitute().getName();
+                var profile = tp.get();
+                pos = profile.getPosition();
+                List<String> instNames = teacherSubjectRepository.findDistinctInstitutesForTeacher(profile.getId()).stream()
+                        .map(i -> i.getName())
+                        .toList();
+                if (!instNames.isEmpty()) {
+                    inst = String.join(", ", instNames);
+                } else if (profile.getInstitute() != null) {
+                    inst = profile.getInstitute().getName();
                 }
-                pos = tp.get().getPosition();
             }
             return ScheduleCompareTeacherOptionResponse.builder()
                     .userId(u.getId())
@@ -301,8 +334,8 @@ public class ScheduleCompareServiceImpl implements ScheduleCompareService {
     }
 
     @Override
-    public List<ScheduleCompareClassroomOptionResponse> listClassrooms(String viewerEmail, String q) {
-        long uni = viewerUniversityResolver.requireUniversityIdForEmail(viewerEmail);
+    public List<ScheduleCompareClassroomOptionResponse> listClassrooms(String viewerEmail, Long universityId, String q) {
+        long uni = resolveCompareCatalogUniversity(viewerEmail, universityId);
         String qq = (q == null || q.isBlank()) ? null : q.trim().toLowerCase(Locale.ROOT);
         return classroomRepository.findByUniversityId(uni).stream()
                 .filter(c -> qq == null || classroomMatches(c, qq))

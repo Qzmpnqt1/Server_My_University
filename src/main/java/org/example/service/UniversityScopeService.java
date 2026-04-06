@@ -3,14 +3,41 @@ package org.example.service;
 import java.util.Set;
 
 /**
- * Проверка принадлежности сущностей вузу и получение university_id текущего администратора.
+ * Проверка принадлежности сущностей вузу и область видимости администраторов (кампусный / супер).
  */
 public interface UniversityScopeService {
 
     /** Все user id студентов, преподавателей и админов указанного вуза (для аудита и фильтрации). */
     Set<Long> allUserIdsInUniversity(Long universityId);
 
-    Long requireAdminUniversityId(String adminEmail);
+    boolean isSuperAdmin(String email);
+
+    void requireAdminOrSuperAdmin(String email);
+
+    /**
+     * Только кампусный {@link org.example.model.UserType#ADMIN}; для {@code SUPER_ADMIN} — исключение.
+     */
+    Long requireCampusUniversityId(String adminEmail);
+
+    /**
+     * Создание сущности, в запросе которой явно передан {@code universityId}.
+     */
+    Long resolveMutationTargetUniversity(String actorEmail, Long requestedUniversityId);
+
+    /**
+     * Доступ к сущности с известным вузом: кампусный админ — только свой вуз; супер — любой.
+     *
+     * @return идентификатор вуза сущности (для последующих assert*InUniversity)
+     */
+    Long enforceAccessToEntityUniversity(String actorEmail, Long entityUniversityId);
+
+    /**
+     * Списки для админ-интерфейса: кампусный админ всегда видит только свой вуз;
+     * супер — все вузы, если {@code queryUniversityId == null}, иначе фильтр по вузу.
+     */
+    AdminListScope resolveAdminListScope(String viewerEmail, Long queryUniversityId);
+
+    record AdminListScope(boolean allUniversities, Long universityId) {}
 
     boolean userBelongsToUniversity(Long userId, Long universityId);
 

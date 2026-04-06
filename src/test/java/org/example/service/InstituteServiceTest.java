@@ -47,8 +47,10 @@ class InstituteServiceTest {
 
     @BeforeEach
     void scopeStubs() {
-        lenient().when(universityScopeService.requireAdminUniversityId(anyString())).thenReturn(1L);
-        lenient().doNothing().when(universityScopeService).assertUniversityMatches(anyLong(), anyLong());
+        lenient().when(universityScopeService.resolveMutationTargetUniversity(anyString(), anyLong()))
+                .thenAnswer(inv -> inv.getArgument(1));
+        lenient().when(universityScopeService.enforceAccessToEntityUniversity(anyString(), anyLong()))
+                .thenAnswer(inv -> inv.getArgument(1));
         lenient().doNothing().when(universityScopeService).assertInstituteInUniversity(anyLong(), anyLong());
     }
 

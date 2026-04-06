@@ -4,6 +4,7 @@ import lombok.RequiredArgsConstructor;
 import org.example.dto.request.ChangeEmailRequest;
 import org.example.dto.request.ChangePasswordRequest;
 import org.example.dto.request.UpdatePersonalProfileRequest;
+import org.example.dto.mapper.TeacherProfileInfoMapper;
 import org.example.dto.response.UserProfileResponse;
 import org.example.exception.BadRequestException;
 import org.example.exception.ConflictException;
@@ -24,6 +25,7 @@ public class UserProfileServiceImpl implements UserProfileService {
     private final TeacherProfileRepository teacherProfileRepository;
     private final AdminProfileRepository adminProfileRepository;
     private final PasswordEncoder passwordEncoder;
+    private final TeacherProfileInfoMapper teacherProfileInfoMapper;
 
     @Override
     public UserProfileResponse getMyProfile(String email) {
@@ -58,12 +60,7 @@ public class UserProfileServiceImpl implements UserProfileService {
                 TeacherProfile profile = teacherProfileRepository.findFetchedByUserId(user.getId())
                         .orElse(null);
                 if (profile != null) {
-                    responseBuilder.teacherProfile(UserProfileResponse.TeacherProfileInfo.builder()
-                            .teacherProfileId(profile.getId())
-                            .instituteId(profile.getInstitute() != null ? profile.getInstitute().getId() : null)
-                            .instituteName(profile.getInstitute() != null ? profile.getInstitute().getName() : null)
-                            .position(profile.getPosition())
-                            .build());
+                    responseBuilder.teacherProfile(teacherProfileInfoMapper.toInfo(profile));
                 }
             }
             case ADMIN -> {
@@ -76,6 +73,17 @@ public class UserProfileServiceImpl implements UserProfileService {
                             .role("ADMIN")
                             .build());
                 }
+            }
+            case SUPER_ADMIN -> {
+                AdminProfile profile = adminProfileRepository.findFetchedByUserId(user.getId())
+                        .orElse(null);
+                responseBuilder.adminProfile(UserProfileResponse.AdminProfileInfo.builder()
+                        .universityId(profile != null && profile.getUniversity() != null
+                                ? profile.getUniversity().getId() : null)
+                        .universityName(profile != null && profile.getUniversity() != null
+                                ? profile.getUniversity().getName() : null)
+                        .role("SUPER_ADMIN")
+                        .build());
             }
         }
 

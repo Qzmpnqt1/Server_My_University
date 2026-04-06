@@ -105,7 +105,7 @@ class ScheduleControllerTest {
     @DisplayName("GET /api/v1/schedule — admin, returns all")
     void getAll_Admin_200() throws Exception {
         mockAdminAuth();
-        when(scheduleService.getAllForAdmin(eq("admin@uni.ru"))).thenReturn(List.of(sampleResponse()));
+        when(scheduleService.getAllForAdmin(eq("admin@uni.ru"), isNull())).thenReturn(List.of(sampleResponse()));
 
         mockMvc.perform(get("/api/v1/schedule")
                         .header("Authorization", "Bearer admin-token"))

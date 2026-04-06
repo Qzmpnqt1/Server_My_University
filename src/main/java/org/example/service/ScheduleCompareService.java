@@ -9,13 +9,14 @@ public interface ScheduleCompareService {
 
     ScheduleCompareResultResponse compare(ScheduleCompareRequest request, String viewerEmail);
 
-    List<ScheduleCompareInstituteOptionResponse> listInstitutes(String viewerEmail);
+    List<ScheduleCompareInstituteOptionResponse> listInstitutes(String viewerEmail, Long universityId);
 
-    List<ScheduleCompareDirectionOptionResponse> listDirections(String viewerEmail, Long instituteId);
+    List<ScheduleCompareDirectionOptionResponse> listDirections(String viewerEmail, Long universityId, Long instituteId);
 
-    List<ScheduleCompareGroupOptionResponse> listGroups(String viewerEmail, Long instituteId, Long directionId, String q);
+    List<ScheduleCompareGroupOptionResponse> listGroups(String viewerEmail, Long universityId, Long instituteId,
+                                                         Long directionId, String q);
 
-    List<ScheduleCompareTeacherOptionResponse> listTeachers(String viewerEmail, String q);
+    List<ScheduleCompareTeacherOptionResponse> listTeachers(String viewerEmail, Long universityId, String q);
 
-    List<ScheduleCompareClassroomOptionResponse> listClassrooms(String viewerEmail, String q);
+    List<ScheduleCompareClassroomOptionResponse> listClassrooms(String viewerEmail, Long universityId, String q);
 }

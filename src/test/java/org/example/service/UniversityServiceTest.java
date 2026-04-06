@@ -5,6 +5,8 @@ import org.example.dto.response.UniversityResponse;
 import org.example.exception.AccessDeniedException;
 import org.example.exception.ResourceNotFoundException;
 import org.example.model.University;
+import org.example.model.UserType;
+import org.example.model.Users;
 import org.example.repository.UniversityRepository;
 import org.example.repository.UsersRepository;
 import org.example.service.UniversityScopeService;
@@ -42,8 +44,14 @@ class UniversityServiceTest {
 
     @BeforeEach
     void scopeStubs() {
-        lenient().when(universityScopeService.requireAdminUniversityId(anyString())).thenReturn(7L);
+        lenient().when(universityScopeService.requireCampusUniversityId(anyString())).thenReturn(7L);
+        lenient().doNothing().when(universityScopeService).requireAdminOrSuperAdmin(anyString());
         lenient().doNothing().when(universityScopeService).assertUniversityMatches(anyLong(), anyLong());
+        Users campusAdmin = Users.builder()
+                .email("admin@test.ru")
+                .userType(UserType.ADMIN)
+                .build();
+        lenient().when(usersRepository.findByEmail("admin@test.ru")).thenReturn(Optional.of(campusAdmin));
     }
 
     @Test

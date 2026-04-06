@@ -16,12 +16,17 @@ public interface TeacherProfileRepository extends JpaRepository<TeacherProfile, 
 
     @Query("""
             SELECT tp FROM TeacherProfile tp
+            LEFT JOIN FETCH tp.university
             LEFT JOIN FETCH tp.institute i
             LEFT JOIN FETCH i.university
             WHERE tp.user.id = :userId
             """)
     Optional<TeacherProfile> findFetchedByUserId(@Param("userId") Long userId);
 
-    @Query("SELECT tp.user.id FROM TeacherProfile tp WHERE tp.institute IS NOT NULL AND tp.institute.university.id = :uniId")
+    @Query("""
+            SELECT tp.user.id FROM TeacherProfile tp
+            WHERE (tp.university IS NOT NULL AND tp.university.id = :uniId)
+               OR (tp.institute IS NOT NULL AND tp.institute.university.id = :uniId)
+            """)
     List<Long> findUserIdsByUniversityId(@Param("uniId") Long universityId);
 }

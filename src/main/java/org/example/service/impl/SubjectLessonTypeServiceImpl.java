@@ -33,17 +33,34 @@ public class SubjectLessonTypeServiceImpl implements SubjectLessonTypeService {
     @Override
     public List<SubjectLessonTypeResponse> getAll(Long subjectDirectionId, String viewerEmail) {
         Optional<Users> viewer = resolveViewer(viewerEmail);
-        if (viewer.isPresent() && viewer.get().getUserType() == UserType.ADMIN) {
-            Long uni = universityScopeService.requireAdminUniversityId(viewerEmail);
-            if (subjectDirectionId != null) {
-                universityScopeService.assertSubjectDirectionInUniversity(subjectDirectionId, uni);
-                return subjectLessonTypeRepository.findBySubjectDirectionId(subjectDirectionId).stream()
+        if (viewer.isPresent()) {
+            UserType t = viewer.get().getUserType();
+            if (t == UserType.ADMIN) {
+                Long uni = universityScopeService.requireCampusUniversityId(viewerEmail);
+                if (subjectDirectionId != null) {
+                    universityScopeService.assertSubjectDirectionInUniversity(subjectDirectionId, uni);
+                    return subjectLessonTypeRepository.findBySubjectDirectionId(subjectDirectionId).stream()
+                            .map(this::mapToResponse)
+                            .collect(Collectors.toList());
+                }
+                return subjectLessonTypeRepository.findByUniversityId(uni).stream()
                         .map(this::mapToResponse)
                         .collect(Collectors.toList());
             }
-            return subjectLessonTypeRepository.findByUniversityId(uni).stream()
-                    .map(this::mapToResponse)
-                    .collect(Collectors.toList());
+            if (t == UserType.SUPER_ADMIN) {
+                if (subjectDirectionId != null) {
+                    SubjectInDirection sd = subjectInDirectionRepository.findById(subjectDirectionId)
+                            .orElseThrow(() -> new ResourceNotFoundException("SubjectInDirection not found with id: " + subjectDirectionId));
+                    universityScopeService.enforceAccessToEntityUniversity(viewerEmail,
+                            sd.getDirection().getInstitute().getUniversity().getId());
+                    return subjectLessonTypeRepository.findBySubjectDirectionId(subjectDirectionId).stream()
+                            .map(this::mapToResponse)
+                            .collect(Collectors.toList());
+                }
+                return subjectLessonTypeRepository.findAll().stream()
+                        .map(this::mapToResponse)
+                        .collect(Collectors.toList());
+            }
         }
         List<SubjectLessonType> list = (subjectDirectionId != null)
                 ? subjectLessonTypeRepository.findBySubjectDirectionId(subjectDirectionId)
@@ -56,10 +73,11 @@ public class SubjectLessonTypeServiceImpl implements SubjectLessonTypeService {
     @Override
     @Transactional
     public SubjectLessonTypeResponse create(SubjectLessonTypeRequest request, String adminEmail) {
-        Long uni = universityScopeService.requireAdminUniversityId(adminEmail);
-        universityScopeService.assertSubjectDirectionInUniversity(request.getSubjectDirectionId(), uni);
         SubjectInDirection subjectDirection = subjectInDirectionRepository.findById(request.getSubjectDirectionId())
                 .orElseThrow(() -> new ResourceNotFoundException("SubjectInDirection not found with id: " + request.getSubjectDirectionId()));
+        Long uni = universityScopeService.enforceAccessToEntityUniversity(adminEmail,
+                subjectDirection.getDirection().getInstitute().getUniversity().getId());
+        universityScopeService.assertSubjectDirectionInUniversity(request.getSubjectDirectionId(), uni);
         SubjectLessonType entity = SubjectLessonType.builder()
                 .subjectDirection(subjectDirection)
                 .lessonType(request.getLessonType())
@@ -70,9 +88,10 @@ public class SubjectLessonTypeServiceImpl implements SubjectLessonTypeService {
     @Override
     @Transactional
     public void delete(Long id, String adminEmail) {
-        Long uni = universityScopeService.requireAdminUniversityId(adminEmail);
         SubjectLessonType entity = subjectLessonTypeRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("SubjectLessonType not found with id: " + id));
+        Long uni = universityScopeService.enforceAccessToEntityUniversity(adminEmail,
+                entity.getSubjectDirection().getDirection().getInstitute().getUniversity().getId());
         universityScopeService.assertSubjectDirectionInUniversity(entity.getSubjectDirection().getId(), uni);
         subjectLessonTypeRepository.deleteById(id);
     }

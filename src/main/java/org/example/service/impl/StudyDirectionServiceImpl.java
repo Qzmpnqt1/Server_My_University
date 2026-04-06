@@ -33,17 +33,33 @@ public class StudyDirectionServiceImpl implements StudyDirectionService {
     @Override
     public List<StudyDirectionResponse> getAll(Long instituteId, String viewerEmail) {
         Optional<Users> viewer = resolveViewer(viewerEmail);
-        if (viewer.isPresent() && viewer.get().getUserType() == UserType.ADMIN) {
-            Long uni = universityScopeService.requireAdminUniversityId(viewerEmail);
-            if (instituteId != null) {
-                universityScopeService.assertInstituteInUniversity(instituteId, uni);
-                return studyDirectionRepository.findByInstituteId(instituteId).stream()
+        if (viewer.isPresent()) {
+            UserType t = viewer.get().getUserType();
+            if (t == UserType.ADMIN) {
+                Long uni = universityScopeService.requireCampusUniversityId(viewerEmail);
+                if (instituteId != null) {
+                    universityScopeService.assertInstituteInUniversity(instituteId, uni);
+                    return studyDirectionRepository.findByInstituteId(instituteId).stream()
+                            .map(this::mapToResponse)
+                            .collect(Collectors.toList());
+                }
+                return studyDirectionRepository.findByInstitute_University_Id(uni).stream()
                         .map(this::mapToResponse)
                         .collect(Collectors.toList());
             }
-            return studyDirectionRepository.findByInstitute_University_Id(uni).stream()
-                    .map(this::mapToResponse)
-                    .collect(Collectors.toList());
+            if (t == UserType.SUPER_ADMIN) {
+                if (instituteId != null) {
+                    Institute i = instituteRepository.findById(instituteId)
+                            .orElseThrow(() -> new ResourceNotFoundException("Institute not found with id: " + instituteId));
+                    universityScopeService.enforceAccessToEntityUniversity(viewerEmail, i.getUniversity().getId());
+                    return studyDirectionRepository.findByInstituteId(instituteId).stream()
+                            .map(this::mapToResponse)
+                            .collect(Collectors.toList());
+                }
+                return studyDirectionRepository.findAll().stream()
+                        .map(this::mapToResponse)
+                        .collect(Collectors.toList());
+            }
         }
         List<StudyDirection> directions = (instituteId != null)
                 ? studyDirectionRepository.findByInstituteId(instituteId)
@@ -58,9 +74,9 @@ public class StudyDirectionServiceImpl implements StudyDirectionService {
         StudyDirection direction = studyDirectionRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Study direction not found with id: " + id));
         resolveViewer(viewerEmail).ifPresent(u -> {
-            if (u.getUserType() == UserType.ADMIN) {
-                Long uni = universityScopeService.requireAdminUniversityId(viewerEmail);
-                universityScopeService.assertStudyDirectionInUniversity(id, uni);
+            if (u.getUserType() == UserType.ADMIN || u.getUserType() == UserType.SUPER_ADMIN) {
+                Long uni = direction.getInstitute().getUniversity().getId();
+                universityScopeService.enforceAccessToEntityUniversity(viewerEmail, uni);
             }
         });
         return mapToResponse(direction);
@@ -69,10 +85,10 @@ public class StudyDirectionServiceImpl implements StudyDirectionService {
     @Override
     @Transactional
     public StudyDirectionResponse create(StudyDirectionRequest request, String adminEmail) {
-        Long uni = universityScopeService.requireAdminUniversityId(adminEmail);
-        universityScopeService.assertInstituteInUniversity(request.getInstituteId(), uni);
         Institute institute = instituteRepository.findById(request.getInstituteId())
                 .orElseThrow(() -> new ResourceNotFoundException("Institute not found with id: " + request.getInstituteId()));
+        Long uni = universityScopeService.enforceAccessToEntityUniversity(adminEmail, institute.getUniversity().getId());
+        universityScopeService.assertInstituteInUniversity(request.getInstituteId(), uni);
         StudyDirection direction = StudyDirection.builder()
                 .name(request.getName())
                 .code(request.getCode())
@@ -84,27 +100,29 @@ public class StudyDirectionServiceImpl implements StudyDirectionService {
     @Override
     @Transactional
     public StudyDirectionResponse update(Long id, StudyDirectionRequest request, String adminEmail) {
-        Long uni = universityScopeService.requireAdminUniversityId(adminEmail);
-        universityScopeService.assertStudyDirectionInUniversity(id, uni);
-        universityScopeService.assertInstituteInUniversity(request.getInstituteId(), uni);
         StudyDirection direction = studyDirectionRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Study direction not found with id: " + id));
-        Institute institute = instituteRepository.findById(request.getInstituteId())
+        Long uni = universityScopeService.enforceAccessToEntityUniversity(adminEmail,
+                direction.getInstitute().getUniversity().getId());
+        universityScopeService.assertStudyDirectionInUniversity(id, uni);
+        Institute newInst = instituteRepository.findById(request.getInstituteId())
                 .orElseThrow(() -> new ResourceNotFoundException("Institute not found with id: " + request.getInstituteId()));
+        universityScopeService.enforceAccessToEntityUniversity(adminEmail, newInst.getUniversity().getId());
+        universityScopeService.assertInstituteInUniversity(request.getInstituteId(), newInst.getUniversity().getId());
         direction.setName(request.getName());
         direction.setCode(request.getCode());
-        direction.setInstitute(institute);
+        direction.setInstitute(newInst);
         return mapToResponse(studyDirectionRepository.save(direction));
     }
 
     @Override
     @Transactional
     public void delete(Long id, String adminEmail) {
-        Long uni = universityScopeService.requireAdminUniversityId(adminEmail);
+        StudyDirection direction = studyDirectionRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Study direction not found with id: " + id));
+        Long uni = universityScopeService.enforceAccessToEntityUniversity(adminEmail,
+                direction.getInstitute().getUniversity().getId());
         universityScopeService.assertStudyDirectionInUniversity(id, uni);
-        if (!studyDirectionRepository.existsById(id)) {
-            throw new ResourceNotFoundException("Study direction not found with id: " + id);
-        }
         studyDirectionRepository.deleteById(id);
     }
 

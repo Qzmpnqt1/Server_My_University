@@ -38,13 +38,26 @@ public class SubjectInDirectionServiceImpl implements SubjectInDirectionService 
 
     private List<SubjectInDirection> listEntities(Long directionId, String viewerEmail) {
         Optional<Users> viewer = resolveViewer(viewerEmail);
-        if (viewer.isPresent() && viewer.get().getUserType() == UserType.ADMIN) {
-            Long uni = universityScopeService.requireAdminUniversityId(viewerEmail);
-            if (directionId != null) {
-                universityScopeService.assertStudyDirectionInUniversity(directionId, uni);
-                return subjectInDirectionRepository.findByDirectionId(directionId);
+        if (viewer.isPresent()) {
+            UserType t = viewer.get().getUserType();
+            if (t == UserType.ADMIN) {
+                Long uni = universityScopeService.requireCampusUniversityId(viewerEmail);
+                if (directionId != null) {
+                    universityScopeService.assertStudyDirectionInUniversity(directionId, uni);
+                    return subjectInDirectionRepository.findByDirectionId(directionId);
+                }
+                return subjectInDirectionRepository.findByDirection_Institute_University_Id(uni);
             }
-            return subjectInDirectionRepository.findByDirection_Institute_University_Id(uni);
+            if (t == UserType.SUPER_ADMIN) {
+                if (directionId != null) {
+                    StudyDirection d = studyDirectionRepository.findById(directionId)
+                            .orElseThrow(() -> new ResourceNotFoundException("Study direction not found with id: " + directionId));
+                    universityScopeService.enforceAccessToEntityUniversity(viewerEmail,
+                            d.getInstitute().getUniversity().getId());
+                    return subjectInDirectionRepository.findByDirectionId(directionId);
+                }
+                return subjectInDirectionRepository.findAll();
+            }
         }
         if (directionId != null) {
             return subjectInDirectionRepository.findByDirectionId(directionId);
@@ -57,9 +70,9 @@ public class SubjectInDirectionServiceImpl implements SubjectInDirectionService 
         SubjectInDirection entity = subjectInDirectionRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("SubjectInDirection not found with id: " + id));
         resolveViewer(viewerEmail).ifPresent(u -> {
-            if (u.getUserType() == UserType.ADMIN) {
-                Long uni = universityScopeService.requireAdminUniversityId(viewerEmail);
-                universityScopeService.assertSubjectDirectionInUniversity(id, uni);
+            if (u.getUserType() == UserType.ADMIN || u.getUserType() == UserType.SUPER_ADMIN) {
+                Long uni = entity.getDirection().getInstitute().getUniversity().getId();
+                universityScopeService.enforceAccessToEntityUniversity(viewerEmail, uni);
             }
         });
         return mapToResponse(entity);
@@ -68,13 +81,14 @@ public class SubjectInDirectionServiceImpl implements SubjectInDirectionService 
     @Override
     @Transactional
     public SubjectInDirectionResponse create(SubjectInDirectionRequest request, String adminEmail) {
-        Long uni = universityScopeService.requireAdminUniversityId(adminEmail);
+        StudyDirection direction = studyDirectionRepository.findById(request.getDirectionId())
+                .orElseThrow(() -> new ResourceNotFoundException("Study direction not found with id: " + request.getDirectionId()));
+        Long uni = universityScopeService.enforceAccessToEntityUniversity(adminEmail,
+                direction.getInstitute().getUniversity().getId());
         universityScopeService.assertStudyDirectionInUniversity(request.getDirectionId(), uni);
 
         Subject subject = subjectRepository.findById(request.getSubjectId())
                 .orElseThrow(() -> new ResourceNotFoundException("Subject not found with id: " + request.getSubjectId()));
-        StudyDirection direction = studyDirectionRepository.findById(request.getDirectionId())
-                .orElseThrow(() -> new ResourceNotFoundException("Study direction not found with id: " + request.getDirectionId()));
         FinalAssessmentType fat = request.getFinalAssessmentType() != null
                 ? request.getFinalAssessmentType()
                 : FinalAssessmentType.EXAM;
@@ -91,18 +105,22 @@ public class SubjectInDirectionServiceImpl implements SubjectInDirectionService 
     @Override
     @Transactional
     public SubjectInDirectionResponse update(Long id, SubjectInDirectionRequest request, String adminEmail) {
-        Long uni = universityScopeService.requireAdminUniversityId(adminEmail);
         SubjectInDirection entity = subjectInDirectionRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("SubjectInDirection not found with id: " + id));
+        Long uni = universityScopeService.enforceAccessToEntityUniversity(adminEmail,
+                entity.getDirection().getInstitute().getUniversity().getId());
         universityScopeService.assertSubjectDirectionInUniversity(id, uni);
-        universityScopeService.assertStudyDirectionInUniversity(request.getDirectionId(), uni);
+        StudyDirection newDir = studyDirectionRepository.findById(request.getDirectionId())
+                .orElseThrow(() -> new ResourceNotFoundException("Study direction not found with id: " + request.getDirectionId()));
+        universityScopeService.enforceAccessToEntityUniversity(adminEmail,
+                newDir.getInstitute().getUniversity().getId());
+        universityScopeService.assertStudyDirectionInUniversity(request.getDirectionId(),
+                newDir.getInstitute().getUniversity().getId());
 
         Subject subject = subjectRepository.findById(request.getSubjectId())
                 .orElseThrow(() -> new ResourceNotFoundException("Subject not found with id: " + request.getSubjectId()));
-        StudyDirection direction = studyDirectionRepository.findById(request.getDirectionId())
-                .orElseThrow(() -> new ResourceNotFoundException("Study direction not found with id: " + request.getDirectionId()));
         entity.setSubject(subject);
-        entity.setDirection(direction);
+        entity.setDirection(newDir);
         entity.setCourse(request.getCourse());
         entity.setSemester(request.getSemester());
         if (request.getFinalAssessmentType() != null) {
@@ -114,11 +132,11 @@ public class SubjectInDirectionServiceImpl implements SubjectInDirectionService 
     @Override
     @Transactional
     public void delete(Long id, String adminEmail) {
-        Long uni = universityScopeService.requireAdminUniversityId(adminEmail);
+        SubjectInDirection entity = subjectInDirectionRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("SubjectInDirection not found with id: " + id));
+        Long uni = universityScopeService.enforceAccessToEntityUniversity(adminEmail,
+                entity.getDirection().getInstitute().getUniversity().getId());
         universityScopeService.assertSubjectDirectionInUniversity(id, uni);
-        if (!subjectInDirectionRepository.existsById(id)) {
-            throw new ResourceNotFoundException("SubjectInDirection not found with id: " + id);
-        }
         subjectInDirectionRepository.deleteById(id);
     }
 

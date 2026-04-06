@@ -17,8 +17,10 @@ import java.sql.Statement;
  *   <li>уже новая схема: только {@code subject_direction_id} (например, после bulk_demo_seed без {@code subject_id}).</li>
  * </ul>
  * Старый SQL с {@code AFTER subject_id} ломался, если колонки {@code subject_id} в таблице не было.
+ * <p>
+ * Версия 22: ранее ошибочно совпадала с V19 (SQL teacher_profiles); уникальные номера обязательны для Flyway.
  */
-public class V19__TeacherSubjectsSubjectInDirection extends BaseJavaMigration {
+public class V22__TeacherSubjectsSubjectInDirection extends BaseJavaMigration {
 
     @Override
     public void migrate(Context context) throws Exception {

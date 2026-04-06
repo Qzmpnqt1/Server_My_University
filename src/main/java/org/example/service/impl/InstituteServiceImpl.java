@@ -33,11 +33,19 @@ public class InstituteServiceImpl implements InstituteService {
     @Override
     public List<InstituteResponse> getAll(Long universityId, String viewerEmail) {
         Optional<Users> viewer = resolveViewer(viewerEmail);
-        if (viewer.isPresent() && viewer.get().getUserType() == UserType.ADMIN) {
-            Long uni = universityScopeService.requireAdminUniversityId(viewerEmail);
-            return instituteRepository.findByUniversityId(uni).stream()
-                    .map(this::mapToResponse)
-                    .collect(Collectors.toList());
+        if (viewer.isPresent()) {
+            UserType t = viewer.get().getUserType();
+            if (t == UserType.ADMIN || t == UserType.SUPER_ADMIN) {
+                var scope = universityScopeService.resolveAdminListScope(viewerEmail, universityId);
+                if (scope.allUniversities()) {
+                    return instituteRepository.findAll().stream()
+                            .map(this::mapToResponse)
+                            .collect(Collectors.toList());
+                }
+                return instituteRepository.findByUniversityId(scope.universityId()).stream()
+                        .map(this::mapToResponse)
+                        .collect(Collectors.toList());
+            }
         }
         List<Institute> institutes = (universityId != null)
                 ? instituteRepository.findByUniversityId(universityId)
@@ -52,9 +60,9 @@ public class InstituteServiceImpl implements InstituteService {
         Institute institute = instituteRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Institute not found with id: " + id));
         resolveViewer(viewerEmail).ifPresent(u -> {
-            if (u.getUserType() == UserType.ADMIN) {
-                Long uni = universityScopeService.requireAdminUniversityId(viewerEmail);
-                universityScopeService.assertInstituteInUniversity(id, uni);
+            if (u.getUserType() == UserType.ADMIN || u.getUserType() == UserType.SUPER_ADMIN) {
+                Long uni = institute.getUniversity().getId();
+                universityScopeService.enforceAccessToEntityUniversity(viewerEmail, uni);
             }
         });
         return mapToResponse(institute);
@@ -63,8 +71,7 @@ public class InstituteServiceImpl implements InstituteService {
     @Override
     @Transactional
     public InstituteResponse create(InstituteRequest request, String adminEmail) {
-        Long uni = universityScopeService.requireAdminUniversityId(adminEmail);
-        universityScopeService.assertUniversityMatches(request.getUniversityId(), uni);
+        universityScopeService.resolveMutationTargetUniversity(adminEmail, request.getUniversityId());
         University university = universityRepository.findById(request.getUniversityId())
                 .orElseThrow(() -> new ResourceNotFoundException("University not found with id: " + request.getUniversityId()));
         Institute institute = Institute.builder()
@@ -78,11 +85,12 @@ public class InstituteServiceImpl implements InstituteService {
     @Override
     @Transactional
     public InstituteResponse update(Long id, InstituteRequest request, String adminEmail) {
-        Long uni = universityScopeService.requireAdminUniversityId(adminEmail);
-        universityScopeService.assertInstituteInUniversity(id, uni);
-        universityScopeService.assertUniversityMatches(request.getUniversityId(), uni);
         Institute institute = instituteRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Institute not found with id: " + id));
+        Long entityUni = institute.getUniversity().getId();
+        Long uni = universityScopeService.enforceAccessToEntityUniversity(adminEmail, entityUni);
+        universityScopeService.assertInstituteInUniversity(id, uni);
+        universityScopeService.resolveMutationTargetUniversity(adminEmail, request.getUniversityId());
         University university = universityRepository.findById(request.getUniversityId())
                 .orElseThrow(() -> new ResourceNotFoundException("University not found with id: " + request.getUniversityId()));
         institute.setName(request.getName());
@@ -94,11 +102,10 @@ public class InstituteServiceImpl implements InstituteService {
     @Override
     @Transactional
     public void delete(Long id, String adminEmail) {
-        Long uni = universityScopeService.requireAdminUniversityId(adminEmail);
+        Institute institute = instituteRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Institute not found with id: " + id));
+        Long uni = universityScopeService.enforceAccessToEntityUniversity(adminEmail, institute.getUniversity().getId());
         universityScopeService.assertInstituteInUniversity(id, uni);
-        if (!instituteRepository.existsById(id)) {
-            throw new ResourceNotFoundException("Institute not found with id: " + id);
-        }
         instituteRepository.deleteById(id);
     }
 

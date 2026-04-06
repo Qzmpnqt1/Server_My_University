@@ -33,19 +33,34 @@ public class TeacherSubjectServiceImpl implements TeacherSubjectService {
     @Override
     public List<TeacherSubjectResponse> getAll(Long teacherId, String viewerEmail) {
         Optional<Users> viewer = resolveViewer(viewerEmail);
-        if (viewer.isPresent() && viewer.get().getUserType() == UserType.ADMIN) {
-            Long uni = universityScopeService.requireAdminUniversityId(viewerEmail);
-            if (teacherId != null) {
-                TeacherProfile tp = teacherProfileRepository.findById(teacherId)
-                        .orElseThrow(() -> new ResourceNotFoundException("Teacher profile not found with id: " + teacherId));
-                universityScopeService.assertUserInUniversity(tp.getUser().getId(), uni);
-                return teacherSubjectRepository.findByTeacherId(teacherId).stream()
+        if (viewer.isPresent()) {
+            UserType t = viewer.get().getUserType();
+            if (t == UserType.ADMIN) {
+                Long uni = universityScopeService.requireCampusUniversityId(viewerEmail);
+                if (teacherId != null) {
+                    TeacherProfile tp = teacherProfileRepository.findById(teacherId)
+                            .orElseThrow(() -> new ResourceNotFoundException("Teacher profile not found with id: " + teacherId));
+                    universityScopeService.assertUserInUniversity(tp.getUser().getId(), uni);
+                    return teacherSubjectRepository.findByTeacherId(teacherId).stream()
+                            .map(this::mapToResponse)
+                            .collect(Collectors.toList());
+                }
+                return teacherSubjectRepository.findByTeacherInUniversityId(uni).stream()
                         .map(this::mapToResponse)
                         .collect(Collectors.toList());
             }
-            return teacherSubjectRepository.findByTeacherInstituteUniversityId(uni).stream()
-                    .map(this::mapToResponse)
-                    .collect(Collectors.toList());
+            if (t == UserType.SUPER_ADMIN) {
+                if (teacherId != null) {
+                    teacherProfileRepository.findById(teacherId)
+                            .orElseThrow(() -> new ResourceNotFoundException("Teacher profile not found with id: " + teacherId));
+                    return teacherSubjectRepository.findByTeacherId(teacherId).stream()
+                            .map(this::mapToResponse)
+                            .collect(Collectors.toList());
+                }
+                return teacherSubjectRepository.findAll().stream()
+                        .map(this::mapToResponse)
+                        .collect(Collectors.toList());
+            }
         }
         List<TeacherSubject> list = (teacherId != null)
                 ? teacherSubjectRepository.findByTeacherId(teacherId)
@@ -58,16 +73,16 @@ public class TeacherSubjectServiceImpl implements TeacherSubjectService {
     @Override
     @Transactional
     public TeacherSubjectResponse create(TeacherSubjectRequest request, String adminEmail) {
-        Long uni = universityScopeService.requireAdminUniversityId(adminEmail);
         TeacherProfile teacher = teacherProfileRepository.findById(request.getTeacherId())
                 .orElseThrow(() -> new ResourceNotFoundException("Teacher profile not found with id: " + request.getTeacherId()));
+        SubjectInDirection sid = subjectInDirectionRepository.findById(request.getSubjectDirectionId())
+                .orElseThrow(() -> new ResourceNotFoundException("SubjectInDirection not found with id: " + request.getSubjectDirectionId()));
+        Long uni = sid.getDirection().getInstitute().getUniversity().getId();
+        universityScopeService.enforceAccessToEntityUniversity(adminEmail, uni);
         universityScopeService.assertUserInUniversity(teacher.getUser().getId(), uni);
+        universityScopeService.assertSubjectDirectionInUniversity(request.getSubjectDirectionId(), uni);
 
         Long sidId = request.getSubjectDirectionId();
-        universityScopeService.assertSubjectDirectionInUniversity(sidId, uni);
-        SubjectInDirection sid = subjectInDirectionRepository.findById(sidId)
-                .orElseThrow(() -> new ResourceNotFoundException("SubjectInDirection not found with id: " + sidId));
-
         if (teacherSubjectRepository.existsByTeacherIdAndSubjectInDirection_Id(request.getTeacherId(), sidId)) {
             throw new ConflictException("Это назначение уже существует для преподавателя");
         }
@@ -84,10 +99,18 @@ public class TeacherSubjectServiceImpl implements TeacherSubjectService {
     public List<TeacherSubjectResponse> replaceAssignments(Long teacherProfileId,
                                                            TeacherSubjectReplaceRequest request,
                                                            String adminEmail) {
-        Long uni = universityScopeService.requireAdminUniversityId(adminEmail);
         TeacherProfile teacher = teacherProfileRepository.findById(teacherProfileId)
                 .orElseThrow(() -> new ResourceNotFoundException("Teacher profile not found with id: " + teacherProfileId));
-        universityScopeService.assertUserInUniversity(teacher.getUser().getId(), uni);
+        Long teacherUni = Optional.ofNullable(teacher.getUniversity())
+                .map(University::getId)
+                .orElseGet(() -> Optional.ofNullable(teacher.getInstitute())
+                        .map(i -> i.getUniversity().getId())
+                        .orElse(null));
+        if (teacherUni == null) {
+            throw new ResourceNotFoundException("Не удалось определить вуз преподавателя для проверки доступа");
+        }
+        universityScopeService.enforceAccessToEntityUniversity(adminEmail, teacherUni);
+        universityScopeService.assertUserInUniversity(teacher.getUser().getId(), teacherUni);
 
         List<Long> desiredDistinct = request.getSubjectDirectionIds() == null
                 ? List.of()
@@ -102,7 +125,7 @@ public class TeacherSubjectServiceImpl implements TeacherSubjectService {
         }
 
         for (Long sidId : desiredDistinct) {
-            universityScopeService.assertSubjectDirectionInUniversity(sidId, uni);
+            universityScopeService.assertSubjectDirectionInUniversity(sidId, teacherUni);
             if (!subjectInDirectionRepository.existsById(sidId)) {
                 throw new ResourceNotFoundException("Позиция учебного плана не найдена: " + sidId);
             }
@@ -123,11 +146,11 @@ public class TeacherSubjectServiceImpl implements TeacherSubjectService {
 
         for (Long sidId : desiredSet) {
             if (!existingDirections.contains(sidId)) {
-                SubjectInDirection sid = subjectInDirectionRepository.findById(sidId)
+                SubjectInDirection sidEntity = subjectInDirectionRepository.findById(sidId)
                         .orElseThrow(() -> new ResourceNotFoundException("SubjectInDirection not found with id: " + sidId));
                 TeacherSubject n = TeacherSubject.builder()
                         .teacher(teacher)
-                        .subjectInDirection(sid)
+                        .subjectInDirection(sidEntity)
                         .build();
                 teacherSubjectRepository.save(n);
             }
@@ -135,15 +158,16 @@ public class TeacherSubjectServiceImpl implements TeacherSubjectService {
 
         return teacherSubjectRepository.findByTeacherId(teacherProfileId).stream()
                 .map(this::mapToResponse)
-                .collect(Collectors.toList());
+                .toList();
     }
 
     @Override
     @Transactional
     public void delete(Long id, String adminEmail) {
-        Long uni = universityScopeService.requireAdminUniversityId(adminEmail);
         TeacherSubject entity = teacherSubjectRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("TeacherSubject not found with id: " + id));
+        Long uni = entity.getSubjectInDirection().getDirection().getInstitute().getUniversity().getId();
+        universityScopeService.enforceAccessToEntityUniversity(adminEmail, uni);
         universityScopeService.assertUserInUniversity(entity.getTeacher().getUser().getId(), uni);
         teacherSubjectRepository.deleteById(id);
     }

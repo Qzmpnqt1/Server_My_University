@@ -23,7 +23,7 @@ public class AdminProfile {
     private Users user;
 
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "university_id", nullable = false)
+    @JoinColumn(name = "university_id")
     private University university;
 
     private String role;

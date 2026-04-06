@@ -19,7 +19,7 @@ public interface RegistrationService {
     void updatePendingRegistration(UpdatePendingRegistrationRequest request);
 
     List<RegistrationRequestResponse> getAllRequests(RegistrationStatus status, UserType userType,
-                                                     Long instituteId, String adminEmail);
+                                                     Long universityId, Long instituteId, String adminEmail);
 
     RegistrationRequestResponse getRequestById(Long id, String adminEmail);
 

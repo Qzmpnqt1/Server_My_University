@@ -2,6 +2,7 @@ package org.example.service.impl;
 
 import lombok.RequiredArgsConstructor;
 import org.example.exception.AccessDeniedException;
+import org.example.exception.BadRequestException;
 import org.example.exception.ResourceNotFoundException;
 import org.example.model.*;
 import org.example.repository.*;
@@ -29,6 +30,17 @@ public class UniversityScopeServiceImpl implements UniversityScopeService {
     private final RegistrationRequestRepository registrationRequestRepository;
     private final ScheduleRepository scheduleRepository;
 
+    private static boolean teacherBelongsToUniversity(TeacherProfile tp, Long universityId) {
+        if (tp.getUniversity() != null && tp.getUniversity().getId().equals(universityId)) {
+            return true;
+        }
+        if (tp.getInstitute() != null && tp.getInstitute().getUniversity() != null
+                && tp.getInstitute().getUniversity().getId().equals(universityId)) {
+            return true;
+        }
+        return false;
+    }
+
     @Override
     public Set<Long> allUserIdsInUniversity(Long universityId) {
         Set<Long> ids = new HashSet<>();
@@ -39,15 +51,91 @@ public class UniversityScopeServiceImpl implements UniversityScopeService {
     }
 
     @Override
-    public Long requireAdminUniversityId(String adminEmail) {
+    public boolean isSuperAdmin(String email) {
+        if (email == null || email.isBlank()) {
+            return false;
+        }
+        return usersRepository.findByEmail(email)
+                .map(u -> u.getUserType() == UserType.SUPER_ADMIN)
+                .orElse(false);
+    }
+
+    @Override
+    public void requireAdminOrSuperAdmin(String email) {
+        Users u = usersRepository.findByEmail(email)
+                .orElseThrow(() -> new ResourceNotFoundException("Пользователь не найден"));
+        if (u.getUserType() != UserType.ADMIN && u.getUserType() != UserType.SUPER_ADMIN) {
+            throw new AccessDeniedException("Требуются права администратора");
+        }
+    }
+
+    @Override
+    public Long requireCampusUniversityId(String adminEmail) {
         Users u = usersRepository.findByEmail(adminEmail)
                 .orElseThrow(() -> new ResourceNotFoundException("Пользователь не найден"));
         if (u.getUserType() != UserType.ADMIN) {
-            throw new AccessDeniedException("Требуются права администратора");
+            throw new AccessDeniedException("Операция доступна только администратору вуза");
         }
         return adminProfileRepository.findFetchedByUserId(u.getId())
-                .map(ap -> ap.getUniversity().getId())
+                .map(ap -> {
+                    if (ap.getUniversity() == null) {
+                        throw new AccessDeniedException("Администратор не привязан к вузу");
+                    }
+                    return ap.getUniversity().getId();
+                })
                 .orElseThrow(() -> new AccessDeniedException("Администратор не привязан к вузу"));
+    }
+
+    @Override
+    public Long resolveMutationTargetUniversity(String actorEmail, Long requestedUniversityId) {
+        requireAdminOrSuperAdmin(actorEmail);
+        if (requestedUniversityId == null) {
+            throw new BadRequestException("Не указан идентификатор вуза");
+        }
+        Users u = usersRepository.findByEmail(actorEmail)
+                .orElseThrow(() -> new ResourceNotFoundException("Пользователь не найден"));
+        if (u.getUserType() == UserType.SUPER_ADMIN) {
+            return requestedUniversityId;
+        }
+        Long my = requireCampusUniversityId(actorEmail);
+        assertUniversityMatches(requestedUniversityId, my);
+        return my;
+    }
+
+    @Override
+    public Long enforceAccessToEntityUniversity(String actorEmail, Long entityUniversityId) {
+        requireAdminOrSuperAdmin(actorEmail);
+        if (entityUniversityId == null) {
+            throw new BadRequestException("Не задан вуз сущности");
+        }
+        Users u = usersRepository.findByEmail(actorEmail)
+                .orElseThrow(() -> new ResourceNotFoundException("Пользователь не найден"));
+        if (u.getUserType() == UserType.SUPER_ADMIN) {
+            return entityUniversityId;
+        }
+        Long my = requireCampusUniversityId(actorEmail);
+        assertUniversityMatches(entityUniversityId, my);
+        return my;
+    }
+
+    @Override
+    public AdminListScope resolveAdminListScope(String viewerEmail, Long queryUniversityId) {
+        Users u = usersRepository.findByEmail(viewerEmail)
+                .orElseThrow(() -> new ResourceNotFoundException("Пользователь не найден"));
+        if (u.getUserType() == UserType.ADMIN) {
+            Long my = requireCampusUniversityId(viewerEmail);
+            if (queryUniversityId != null && !queryUniversityId.equals(my)) {
+                throw new AccessDeniedException("Нет доступа к данным другого вуза");
+            }
+            return new AdminListScope(false, my);
+        }
+        if (u.getUserType() == UserType.SUPER_ADMIN) {
+            if (queryUniversityId != null) {
+                return new AdminListScope(false, queryUniversityId);
+            }
+            return new AdminListScope(true, null);
+        }
+        throw new AccessDeniedException("Требуются права администратора");
     }
 
     @Override
@@ -66,11 +154,9 @@ public class UniversityScopeServiceImpl implements UniversityScopeService {
                     })
                     .orElse(false);
             case TEACHER -> teacherProfileRepository.findByUserId(userId)
-                    .map(tp -> tp.getInstitute() != null
-                            && tp.getInstitute().getUniversity() != null
-                            && tp.getInstitute().getUniversity().getId().equals(universityId))
+                    .map(tp -> teacherBelongsToUniversity(tp, universityId))
                     .orElse(false);
-            case ADMIN -> adminProfileRepository.findByUserId(userId)
+            case ADMIN, SUPER_ADMIN -> adminProfileRepository.findByUserId(userId)
                     .map(ap -> ap.getUniversity() != null && ap.getUniversity().getId().equals(universityId))
                     .orElse(false);
         };

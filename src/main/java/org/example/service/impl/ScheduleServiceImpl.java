@@ -42,8 +42,24 @@ public class ScheduleServiceImpl implements ScheduleService {
 
     @Override
     @Transactional(readOnly = true)
-    public List<ScheduleResponse> getAllForAdmin(String adminEmail) {
-        Long uni = universityScopeService.requireAdminUniversityId(adminEmail);
+    public List<ScheduleResponse> getAllForAdmin(String adminEmail, Long universityIdFilter) {
+        Users actor = usersRepository.findByEmail(adminEmail)
+                .orElseThrow(() -> new ResourceNotFoundException("Пользователь не найден"));
+        universityScopeService.requireAdminOrSuperAdmin(adminEmail);
+        if (actor.getUserType() == UserType.SUPER_ADMIN) {
+            if (universityIdFilter != null) {
+                return scheduleRepository.findAllByUniversityId(universityIdFilter).stream()
+                        .map(ScheduleResponseMapper::toResponse)
+                        .collect(Collectors.toList());
+            }
+            return scheduleRepository.findAll().stream()
+                    .map(ScheduleResponseMapper::toResponse)
+                    .collect(Collectors.toList());
+        }
+        Long uni = universityScopeService.requireCampusUniversityId(adminEmail);
+        if (universityIdFilter != null && !universityIdFilter.equals(uni)) {
+            throw new AccessDeniedException("Нет доступа к расписанию другого вуза");
+        }
         return scheduleRepository.findAllByUniversityId(uni).stream()
                 .map(ScheduleResponseMapper::toResponse)
                 .collect(Collectors.toList());
@@ -109,7 +125,7 @@ public class ScheduleServiceImpl implements ScheduleService {
             case TEACHER -> {
                 return getByTeacher(user.getId(), weekNumber, dayOfWeek);
             }
-            case ADMIN -> throw new AccessDeniedException(
+            case ADMIN, SUPER_ADMIN -> throw new AccessDeniedException(
                     "Для администратора используйте просмотр расписания по группе или преподавателю");
             default -> throw new BadRequestException("Расписание недоступно для данного типа пользователя");
         }
@@ -162,8 +178,9 @@ public class ScheduleServiceImpl implements ScheduleService {
 
         Users actor = usersRepository.findByEmail(actorEmail)
                 .orElseThrow(() -> new ResourceNotFoundException("Пользователь не найден"));
-        if (actor.getUserType() == UserType.ADMIN) {
-            Long uni = universityScopeService.requireAdminUniversityId(actorEmail);
+        if (actor.getUserType() == UserType.ADMIN || actor.getUserType() == UserType.SUPER_ADMIN) {
+            Long uni = group.getDirection().getInstitute().getUniversity().getId();
+            universityScopeService.enforceAccessToEntityUniversity(actorEmail, uni);
             universityScopeService.assertSubjectDirectionInUniversity(subjectType.getSubjectDirection().getId(), uni);
             universityScopeService.assertAcademicGroupInUniversity(request.getGroupId(), uni);
             universityScopeService.assertClassroomInUniversity(request.getClassroomId(), uni);
@@ -215,8 +232,9 @@ public class ScheduleServiceImpl implements ScheduleService {
 
         Users actor = usersRepository.findByEmail(actorEmail)
                 .orElseThrow(() -> new ResourceNotFoundException("Пользователь не найден"));
-        if (actor.getUserType() == UserType.ADMIN) {
-            Long uni = universityScopeService.requireAdminUniversityId(actorEmail);
+        if (actor.getUserType() == UserType.ADMIN || actor.getUserType() == UserType.SUPER_ADMIN) {
+            Long uni = group.getDirection().getInstitute().getUniversity().getId();
+            universityScopeService.enforceAccessToEntityUniversity(actorEmail, uni);
             universityScopeService.assertSubjectDirectionInUniversity(subjectType.getSubjectDirection().getId(), uni);
             universityScopeService.assertAcademicGroupInUniversity(request.getGroupId(), uni);
             universityScopeService.assertClassroomInUniversity(request.getClassroomId(), uni);
@@ -250,8 +268,9 @@ public class ScheduleServiceImpl implements ScheduleService {
                 .orElseThrow(() -> new ResourceNotFoundException("Запись расписания не найдена"));
         Users actor = usersRepository.findByEmail(actorEmail)
                 .orElseThrow(() -> new ResourceNotFoundException("Пользователь не найден"));
-        if (actor.getUserType() == UserType.ADMIN) {
-            Long uni = universityScopeService.requireAdminUniversityId(actorEmail);
+        if (actor.getUserType() == UserType.ADMIN || actor.getUserType() == UserType.SUPER_ADMIN) {
+            Long uni = schedule.getGroup().getDirection().getInstitute().getUniversity().getId();
+            universityScopeService.enforceAccessToEntityUniversity(actorEmail, uni);
             universityScopeService.assertAcademicGroupInUniversity(schedule.getGroup().getId(), uni);
         }
         Long groupId = schedule.getGroup().getId();

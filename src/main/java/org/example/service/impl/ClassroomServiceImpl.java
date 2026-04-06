@@ -33,11 +33,19 @@ public class ClassroomServiceImpl implements ClassroomService {
     @Override
     public List<ClassroomResponse> getAll(Long universityId, String viewerEmail) {
         Optional<Users> viewer = resolveViewer(viewerEmail);
-        if (viewer.isPresent() && viewer.get().getUserType() == UserType.ADMIN) {
-            Long uni = universityScopeService.requireAdminUniversityId(viewerEmail);
-            return classroomRepository.findByUniversityId(uni).stream()
-                    .map(this::mapToResponse)
-                    .collect(Collectors.toList());
+        if (viewer.isPresent()) {
+            UserType t = viewer.get().getUserType();
+            if (t == UserType.ADMIN || t == UserType.SUPER_ADMIN) {
+                var scope = universityScopeService.resolveAdminListScope(viewerEmail, universityId);
+                if (scope.allUniversities()) {
+                    return classroomRepository.findAll().stream()
+                            .map(this::mapToResponse)
+                            .collect(Collectors.toList());
+                }
+                return classroomRepository.findByUniversityId(scope.universityId()).stream()
+                        .map(this::mapToResponse)
+                        .collect(Collectors.toList());
+            }
         }
         List<Classroom> classrooms = (universityId != null)
                 ? classroomRepository.findByUniversityId(universityId)
@@ -52,9 +60,9 @@ public class ClassroomServiceImpl implements ClassroomService {
         Classroom classroom = classroomRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Classroom not found with id: " + id));
         resolveViewer(viewerEmail).ifPresent(u -> {
-            if (u.getUserType() == UserType.ADMIN) {
-                Long uni = universityScopeService.requireAdminUniversityId(viewerEmail);
-                universityScopeService.assertClassroomInUniversity(id, uni);
+            if (u.getUserType() == UserType.ADMIN || u.getUserType() == UserType.SUPER_ADMIN) {
+                Long uni = classroom.getUniversity().getId();
+                universityScopeService.enforceAccessToEntityUniversity(viewerEmail, uni);
             }
         });
         return mapToResponse(classroom);
@@ -63,8 +71,7 @@ public class ClassroomServiceImpl implements ClassroomService {
     @Override
     @Transactional
     public ClassroomResponse create(ClassroomRequest request, String adminEmail) {
-        Long uni = universityScopeService.requireAdminUniversityId(adminEmail);
-        universityScopeService.assertUniversityMatches(request.getUniversityId(), uni);
+        universityScopeService.resolveMutationTargetUniversity(adminEmail, request.getUniversityId());
         University university = universityRepository.findById(request.getUniversityId())
                 .orElseThrow(() -> new ResourceNotFoundException("University not found with id: " + request.getUniversityId()));
         Classroom classroom = Classroom.builder()
@@ -79,11 +86,11 @@ public class ClassroomServiceImpl implements ClassroomService {
     @Override
     @Transactional
     public ClassroomResponse update(Long id, ClassroomRequest request, String adminEmail) {
-        Long uni = universityScopeService.requireAdminUniversityId(adminEmail);
-        universityScopeService.assertClassroomInUniversity(id, uni);
-        universityScopeService.assertUniversityMatches(request.getUniversityId(), uni);
         Classroom classroom = classroomRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Classroom not found with id: " + id));
+        Long uni = universityScopeService.enforceAccessToEntityUniversity(adminEmail, classroom.getUniversity().getId());
+        universityScopeService.assertClassroomInUniversity(id, uni);
+        universityScopeService.resolveMutationTargetUniversity(adminEmail, request.getUniversityId());
         University university = universityRepository.findById(request.getUniversityId())
                 .orElseThrow(() -> new ResourceNotFoundException("University not found with id: " + request.getUniversityId()));
         classroom.setBuilding(request.getBuilding());
@@ -96,11 +103,10 @@ public class ClassroomServiceImpl implements ClassroomService {
     @Override
     @Transactional
     public void delete(Long id, String adminEmail) {
-        Long uni = universityScopeService.requireAdminUniversityId(adminEmail);
+        Classroom classroom = classroomRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Classroom not found with id: " + id));
+        Long uni = universityScopeService.enforceAccessToEntityUniversity(adminEmail, classroom.getUniversity().getId());
         universityScopeService.assertClassroomInUniversity(id, uni);
-        if (!classroomRepository.existsById(id)) {
-            throw new ResourceNotFoundException("Classroom not found with id: " + id);
-        }
         classroomRepository.deleteById(id);
     }
 

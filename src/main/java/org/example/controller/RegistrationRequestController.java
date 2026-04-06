@@ -26,9 +26,10 @@ public class RegistrationRequestController {
     public ResponseEntity<List<RegistrationRequestResponse>> getAll(
             @RequestParam(required = false) RegistrationStatus status,
             @RequestParam(required = false) UserType userType,
+            @RequestParam(required = false) Long universityId,
             @RequestParam(required = false) Long instituteId,
             Principal principal) {
-        return ResponseEntity.ok(registrationService.getAllRequests(status, userType, instituteId,
+        return ResponseEntity.ok(registrationService.getAllRequests(status, userType, universityId, instituteId,
                 principal.getName()));
     }
 

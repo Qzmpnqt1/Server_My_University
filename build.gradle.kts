@@ -14,7 +14,9 @@ java {
 }
 
 repositories {
-    mavenCentral()
+    // repo1.maven.org — тот же Central, другой хост/CDN; при обрыве TLS к repo.maven.apache.org Gradle подхватит следующий.
+    maven { url = uri("https://repo1.maven.org/maven2/") }
+    maven { url = uri("https://repo.maven.apache.org/maven2/") }
 }
 
 dependencies {

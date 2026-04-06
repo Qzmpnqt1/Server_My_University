@@ -33,8 +33,10 @@ public class ViewerUniversityResolverImpl implements ViewerUniversityResolver {
         Users u = usersRepository.findByEmail(email)
                 .orElseThrow(() -> new ResourceNotFoundException("Пользователь не найден"));
         return switch (u.getUserType()) {
+            case SUPER_ADMIN -> throw new AccessDeniedException(
+                    "Для суперадминистратора укажите вуз в параметрах запроса (universityId / scopeUniversityId)");
             case ADMIN -> {
-                long id = universityScopeService.requireAdminUniversityId(email);
+                long id = universityScopeService.requireCampusUniversityId(email);
                 log.debug("ViewerUniversityResolver admin email={} universityId={}", email, id);
                 yield id;
             }
@@ -60,6 +62,9 @@ public class ViewerUniversityResolverImpl implements ViewerUniversityResolver {
             throw new AccessDeniedException("Профиль преподавателя не найден");
         }
         var tp = tpOpt.get();
+        if (tp.getUniversity() != null) {
+            return tp.getUniversity().getId();
+        }
         if (tp.getInstitute() != null && tp.getInstitute().getUniversity() != null) {
             return tp.getInstitute().getUniversity().getId();
         }

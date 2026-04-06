@@ -36,7 +36,6 @@ public class RegistrationServiceImpl implements RegistrationService {
     private final UsersRepository usersRepository;
     private final UniversityRepository universityRepository;
     private final AcademicGroupRepository academicGroupRepository;
-    private final InstituteRepository instituteRepository;
     private final StudentProfileRepository studentProfileRepository;
     private final TeacherProfileRepository teacherProfileRepository;
     private final AdminProfileRepository adminProfileRepository;
@@ -60,23 +59,24 @@ public class RegistrationServiceImpl implements RegistrationService {
                 .orElseThrow(() -> new ResourceNotFoundException("Университет не найден"));
 
         AcademicGroup group = null;
+        Institute institute = null;
+
         if (request.getUserType() == UserType.STUDENT) {
             if (request.getGroupId() == null) {
                 throw new BadRequestException("Для студента необходимо указать группу");
             }
             group = academicGroupRepository.findById(request.getGroupId())
                     .orElseThrow(() -> new ResourceNotFoundException("Академическая группа не найдена"));
-        }
-
-        Institute institute = null;
-        if (request.getUserType() == UserType.TEACHER) {
-            if (request.getInstituteId() != null) {
-                institute = instituteRepository.findById(request.getInstituteId())
-                        .orElseThrow(() -> new ResourceNotFoundException("Институт не найден"));
+        } else if (request.getUserType() == UserType.TEACHER) {
+            if (request.getGroupId() != null) {
+                throw new BadRequestException(
+                        "Для преподавателя группа не указывается; институты и предметы назначает администратор после одобрения");
             }
+            // Институт и дисциплины не задаются при регистрации преподавателя
+            institute = null;
         }
 
-        if (request.getUserType() == UserType.ADMIN) {
+        if (request.getUserType() == UserType.ADMIN || request.getUserType() == UserType.SUPER_ADMIN) {
             throw new BadRequestException("Регистрация администратора через заявку запрещена");
         }
 
@@ -144,21 +144,22 @@ public class RegistrationServiceImpl implements RegistrationService {
                 .orElseThrow(() -> new ResourceNotFoundException("Университет не найден"));
 
         AcademicGroup group = null;
+        Institute institute = null;
         if (upd.getUserType() == UserType.STUDENT) {
             if (upd.getGroupId() == null) {
                 throw new BadRequestException("Для студента необходимо указать группу");
             }
             group = academicGroupRepository.findById(upd.getGroupId())
                     .orElseThrow(() -> new ResourceNotFoundException("Академическая группа не найдена"));
+        } else if (upd.getUserType() == UserType.TEACHER) {
+            if (upd.getGroupId() != null) {
+                throw new BadRequestException(
+                        "Для преподавателя группа не указывается; институты и предметы назначает администратор после одобрения");
+            }
+            institute = null;
         }
 
-        Institute institute = null;
-        if (upd.getUserType() == UserType.TEACHER && upd.getInstituteId() != null) {
-            institute = instituteRepository.findById(upd.getInstituteId())
-                    .orElseThrow(() -> new ResourceNotFoundException("Институт не найден"));
-        }
-
-        if (upd.getUserType() == UserType.ADMIN) {
+        if (upd.getUserType() == UserType.ADMIN || upd.getUserType() == UserType.SUPER_ADMIN) {
             throw new BadRequestException("Регистрация администратора через заявку запрещена");
         }
 
@@ -176,8 +177,19 @@ public class RegistrationServiceImpl implements RegistrationService {
     @Override
     @Transactional(readOnly = true)
     public List<RegistrationRequestResponse> getAllRequests(RegistrationStatus status, UserType userType,
-                                                            Long instituteId, String adminEmail) {
-        Long adminUni = universityScopeService.requireAdminUniversityId(adminEmail);
+                                                            Long universityId, Long instituteId, String adminEmail) {
+        Users actor = usersRepository.findByEmail(adminEmail)
+                .orElseThrow(() -> new ResourceNotFoundException("Пользователь не найден"));
+        universityScopeService.requireAdminOrSuperAdmin(adminEmail);
+        Long filterUni;
+        if (actor.getUserType() == UserType.ADMIN) {
+            filterUni = universityScopeService.requireCampusUniversityId(adminEmail);
+            if (universityId != null && !universityId.equals(filterUni)) {
+                throw new org.example.exception.AccessDeniedException("Нет доступа к заявкам другого вуза");
+            }
+        } else {
+            filterUni = universityId;
+        }
         Specification<RegistrationRequest> spec = (root, query, cb) -> {
             List<Predicate> predicates = new ArrayList<>();
             if (status != null) {
@@ -186,7 +198,9 @@ public class RegistrationServiceImpl implements RegistrationService {
             if (userType != null) {
                 predicates.add(cb.equal(root.get("userType"), userType));
             }
-            predicates.add(cb.equal(root.get("university").get("id"), adminUni));
+            if (filterUni != null) {
+                predicates.add(cb.equal(root.get("university").get("id"), filterUni));
+            }
             if (instituteId != null) {
                 predicates.add(cb.equal(root.join("institute").get("id"), instituteId));
             }
@@ -203,8 +217,13 @@ public class RegistrationServiceImpl implements RegistrationService {
     @Override
     @Transactional(readOnly = true)
     public RegistrationRequestResponse getRequestById(Long id, String adminEmail) {
-        Long adminUni = universityScopeService.requireAdminUniversityId(adminEmail);
-        universityScopeService.assertRegistrationRequestInUniversity(id, adminUni);
+        Users actor = usersRepository.findByEmail(adminEmail)
+                .orElseThrow(() -> new ResourceNotFoundException("Пользователь не найден"));
+        universityScopeService.requireAdminOrSuperAdmin(adminEmail);
+        if (actor.getUserType() == UserType.ADMIN) {
+            Long adminUni = universityScopeService.requireCampusUniversityId(adminEmail);
+            universityScopeService.assertRegistrationRequestInUniversity(id, adminUni);
+        }
         RegistrationRequest request = registrationRequestRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Заявка на регистрацию не найдена"));
         return mapToResponse(request);
@@ -216,8 +235,11 @@ public class RegistrationServiceImpl implements RegistrationService {
         RegistrationRequest request = registrationRequestRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Заявка на регистрацию не найдена"));
 
-        Long adminUni = universityScopeService.requireAdminUniversityId(adminEmail);
-        universityScopeService.assertRegistrationRequestInUniversity(id, adminUni);
+        universityScopeService.requireAdminOrSuperAdmin(adminEmail);
+        if (usersRepository.findByEmail(adminEmail).orElseThrow().getUserType() == UserType.ADMIN) {
+            Long adminUni = universityScopeService.requireCampusUniversityId(adminEmail);
+            universityScopeService.assertRegistrationRequestInUniversity(id, adminUni);
+        }
 
         if (request.getStatus() != RegistrationStatus.PENDING) {
             throw new BadRequestException("Можно одобрить только заявку со статусом PENDING");
@@ -256,8 +278,11 @@ public class RegistrationServiceImpl implements RegistrationService {
         RegistrationRequest request = registrationRequestRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Заявка на регистрацию не найдена"));
 
-        Long adminUni = universityScopeService.requireAdminUniversityId(adminEmail);
-        universityScopeService.assertRegistrationRequestInUniversity(id, adminUni);
+        universityScopeService.requireAdminOrSuperAdmin(adminEmail);
+        if (usersRepository.findByEmail(adminEmail).orElseThrow().getUserType() == UserType.ADMIN) {
+            Long adminUni = universityScopeService.requireCampusUniversityId(adminEmail);
+            universityScopeService.assertRegistrationRequestInUniversity(id, adminUni);
+        }
 
         if (request.getStatus() != RegistrationStatus.PENDING) {
             throw new BadRequestException("Можно отклонить только заявку со статусом PENDING");
@@ -287,7 +312,8 @@ public class RegistrationServiceImpl implements RegistrationService {
             case TEACHER -> {
                 TeacherProfile teacherProfile = TeacherProfile.builder()
                         .user(user)
-                        .institute(request.getInstitute())
+                        .university(request.getUniversity())
+                        .institute(null)
                         .build();
                 teacherProfileRepository.save(teacherProfile);
             }

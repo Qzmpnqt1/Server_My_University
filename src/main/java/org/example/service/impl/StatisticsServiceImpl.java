@@ -39,6 +39,7 @@ public class StatisticsServiceImpl implements StatisticsService {
     private final UniversityScopeService universityScopeService;
     private final TeacherProfileRepository teacherProfileRepository;
     private final TeacherSubjectRepository teacherSubjectRepository;
+    private final ClassroomRepository classroomRepository;
 
     @Override
     public SubjectStatisticsResponse getSubjectStatistics(Long subjectDirectionId, String viewerEmail) {
@@ -546,8 +547,9 @@ public class StatisticsServiceImpl implements StatisticsService {
     private void ensureSubjectDirectionAccess(SubjectInDirection sid, String viewerEmail) {
         Users u = usersRepository.findByEmail(viewerEmail)
                 .orElseThrow(() -> new AccessDeniedException("Пользователь не найден"));
-        if (u.getUserType() == UserType.ADMIN) {
-            Long uni = universityScopeService.requireAdminUniversityId(viewerEmail);
+        if (u.getUserType() == UserType.ADMIN || u.getUserType() == UserType.SUPER_ADMIN) {
+            Long uni = sid.getDirection().getInstitute().getUniversity().getId();
+            universityScopeService.enforceAccessToEntityUniversity(viewerEmail, uni);
             universityScopeService.assertSubjectDirectionInUniversity(sid.getId(), uni);
         } else if (u.getUserType() == UserType.TEACHER) {
             TeacherProfile tp = teacherProfileRepository.findByUserId(u.getId())
@@ -563,8 +565,9 @@ public class StatisticsServiceImpl implements StatisticsService {
     private void ensureGroupAccess(AcademicGroup group, String viewerEmail) {
         Users u = usersRepository.findByEmail(viewerEmail)
                 .orElseThrow(() -> new AccessDeniedException("Пользователь не найден"));
-        if (u.getUserType() == UserType.ADMIN) {
-            Long uni = universityScopeService.requireAdminUniversityId(viewerEmail);
+        if (u.getUserType() == UserType.ADMIN || u.getUserType() == UserType.SUPER_ADMIN) {
+            Long uni = group.getDirection().getInstitute().getUniversity().getId();
+            universityScopeService.enforceAccessToEntityUniversity(viewerEmail, uni);
             universityScopeService.assertAcademicGroupInUniversity(group.getId(), uni);
         } else if (u.getUserType() == UserType.TEACHER) {
             TeacherProfile tp = teacherProfileRepository.findByUserId(u.getId())
@@ -580,8 +583,9 @@ public class StatisticsServiceImpl implements StatisticsService {
     private void ensureDirectionAccess(StudyDirection dir, String viewerEmail) {
         Users u = usersRepository.findByEmail(viewerEmail)
                 .orElseThrow(() -> new AccessDeniedException("Пользователь не найден"));
-        if (u.getUserType() == UserType.ADMIN) {
-            Long uni = universityScopeService.requireAdminUniversityId(viewerEmail);
+        if (u.getUserType() == UserType.ADMIN || u.getUserType() == UserType.SUPER_ADMIN) {
+            Long uni = dir.getInstitute().getUniversity().getId();
+            universityScopeService.enforceAccessToEntityUniversity(viewerEmail, uni);
             universityScopeService.assertStudyDirectionInUniversity(dir.getId(), uni);
         } else if (u.getUserType() == UserType.TEACHER) {
             TeacherProfile tp = teacherProfileRepository.findByUserId(u.getId())
@@ -596,26 +600,36 @@ public class StatisticsServiceImpl implements StatisticsService {
 
     private void ensureAdminInstitute(Long instituteId, String viewerEmail) {
         usersRepository.findByEmail(viewerEmail).ifPresent(u -> {
-            if (u.getUserType() == UserType.ADMIN) {
-                Long uni = universityScopeService.requireAdminUniversityId(viewerEmail);
-                universityScopeService.assertInstituteInUniversity(instituteId, uni);
+            if (u.getUserType() == UserType.ADMIN || u.getUserType() == UserType.SUPER_ADMIN) {
+                Institute i = instituteRepository.findById(instituteId)
+                        .orElseThrow(() -> new ResourceNotFoundException("Институт не найден"));
+                universityScopeService.enforceAccessToEntityUniversity(viewerEmail, i.getUniversity().getId());
+                universityScopeService.assertInstituteInUniversity(instituteId, i.getUniversity().getId());
             }
         });
     }
 
     private void ensureAdminUniversity(Long universityId, String viewerEmail) {
         usersRepository.findByEmail(viewerEmail).ifPresent(u -> {
-            if (u.getUserType() == UserType.ADMIN) {
-                Long uni = universityScopeService.requireAdminUniversityId(viewerEmail);
-                universityScopeService.assertUniversityMatches(universityId, uni);
+            if (u.getUserType() == UserType.ADMIN || u.getUserType() == UserType.SUPER_ADMIN) {
+                universityScopeService.enforceAccessToEntityUniversity(viewerEmail, universityId);
+                universityScopeService.assertUniversityMatches(universityId, universityId);
             }
         });
     }
 
     private void ensureAdminTeacher(Long teacherUserId, String viewerEmail) {
         usersRepository.findByEmail(viewerEmail).ifPresent(u -> {
-            if (u.getUserType() == UserType.ADMIN) {
-                Long uni = universityScopeService.requireAdminUniversityId(viewerEmail);
+            if (u.getUserType() == UserType.ADMIN || u.getUserType() == UserType.SUPER_ADMIN) {
+                TeacherProfile tp = teacherProfileRepository.findByUserId(teacherUserId)
+                        .orElseThrow(() -> new ResourceNotFoundException("Профиль преподавателя не найден"));
+                Long uni = Optional.ofNullable(tp.getUniversity())
+                        .map(University::getId)
+                        .orElseGet(() -> Optional.ofNullable(tp.getInstitute())
+                                .map(inst -> inst.getUniversity().getId())
+                                .orElseThrow(() -> new AccessDeniedException(
+                                        "Не удалось определить вуз преподавателя для проверки доступа")));
+                universityScopeService.enforceAccessToEntityUniversity(viewerEmail, uni);
                 universityScopeService.assertUserInUniversity(teacherUserId, uni);
             }
         });
@@ -623,8 +637,11 @@ public class StatisticsServiceImpl implements StatisticsService {
 
     private void ensureAdminClassroom(Long classroomId, String viewerEmail) {
         usersRepository.findByEmail(viewerEmail).ifPresent(u -> {
-            if (u.getUserType() == UserType.ADMIN) {
-                Long uni = universityScopeService.requireAdminUniversityId(viewerEmail);
+            if (u.getUserType() == UserType.ADMIN || u.getUserType() == UserType.SUPER_ADMIN) {
+                Classroom c = classroomRepository.findById(classroomId)
+                        .orElseThrow(() -> new ResourceNotFoundException("Аудитория не найдена"));
+                Long uni = c.getUniversity().getId();
+                universityScopeService.enforceAccessToEntityUniversity(viewerEmail, uni);
                 universityScopeService.assertClassroomInUniversity(classroomId, uni);
             }
         });

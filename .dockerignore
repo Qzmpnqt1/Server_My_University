@@ -6,3 +6,5 @@ build
 out
 bin
 **/.DS_Store
+# Локальный JDK Windows в gradle.properties ломает сборку в Linux-контейнере, если когда-нибудь сделают COPY .
+gradle.properties

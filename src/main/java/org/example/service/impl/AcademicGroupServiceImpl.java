@@ -33,17 +33,34 @@ public class AcademicGroupServiceImpl implements AcademicGroupService {
     @Override
     public List<AcademicGroupResponse> getAll(Long directionId, String viewerEmail) {
         Optional<Users> viewer = resolveViewer(viewerEmail);
-        if (viewer.isPresent() && viewer.get().getUserType() == UserType.ADMIN) {
-            Long uni = universityScopeService.requireAdminUniversityId(viewerEmail);
-            if (directionId != null) {
-                universityScopeService.assertStudyDirectionInUniversity(directionId, uni);
-                return academicGroupRepository.findByDirectionId(directionId).stream()
+        if (viewer.isPresent()) {
+            UserType t = viewer.get().getUserType();
+            if (t == UserType.ADMIN) {
+                Long uni = universityScopeService.requireCampusUniversityId(viewerEmail);
+                if (directionId != null) {
+                    universityScopeService.assertStudyDirectionInUniversity(directionId, uni);
+                    return academicGroupRepository.findByDirectionId(directionId).stream()
+                            .map(this::mapToResponse)
+                            .collect(Collectors.toList());
+                }
+                return academicGroupRepository.findByDirection_Institute_University_Id(uni).stream()
                         .map(this::mapToResponse)
                         .collect(Collectors.toList());
             }
-            return academicGroupRepository.findByDirection_Institute_University_Id(uni).stream()
-                    .map(this::mapToResponse)
-                    .collect(Collectors.toList());
+            if (t == UserType.SUPER_ADMIN) {
+                if (directionId != null) {
+                    StudyDirection d = studyDirectionRepository.findById(directionId)
+                            .orElseThrow(() -> new ResourceNotFoundException("Study direction not found with id: " + directionId));
+                    universityScopeService.enforceAccessToEntityUniversity(viewerEmail,
+                            d.getInstitute().getUniversity().getId());
+                    return academicGroupRepository.findByDirectionId(directionId).stream()
+                            .map(this::mapToResponse)
+                            .collect(Collectors.toList());
+                }
+                return academicGroupRepository.findAll().stream()
+                        .map(this::mapToResponse)
+                        .collect(Collectors.toList());
+            }
         }
         List<AcademicGroup> groups = (directionId != null)
                 ? academicGroupRepository.findByDirectionId(directionId)
@@ -58,9 +75,9 @@ public class AcademicGroupServiceImpl implements AcademicGroupService {
         AcademicGroup group = academicGroupRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Academic group not found with id: " + id));
         resolveViewer(viewerEmail).ifPresent(u -> {
-            if (u.getUserType() == UserType.ADMIN) {
-                Long uni = universityScopeService.requireAdminUniversityId(viewerEmail);
-                universityScopeService.assertAcademicGroupInUniversity(id, uni);
+            if (u.getUserType() == UserType.ADMIN || u.getUserType() == UserType.SUPER_ADMIN) {
+                Long uni = group.getDirection().getInstitute().getUniversity().getId();
+                universityScopeService.enforceAccessToEntityUniversity(viewerEmail, uni);
             }
         });
         return mapToResponse(group);
@@ -69,10 +86,11 @@ public class AcademicGroupServiceImpl implements AcademicGroupService {
     @Override
     @Transactional
     public AcademicGroupResponse create(AcademicGroupRequest request, String adminEmail) {
-        Long uni = universityScopeService.requireAdminUniversityId(adminEmail);
-        universityScopeService.assertStudyDirectionInUniversity(request.getDirectionId(), uni);
         StudyDirection direction = studyDirectionRepository.findById(request.getDirectionId())
                 .orElseThrow(() -> new ResourceNotFoundException("Study direction not found with id: " + request.getDirectionId()));
+        Long uni = universityScopeService.enforceAccessToEntityUniversity(adminEmail,
+                direction.getInstitute().getUniversity().getId());
+        universityScopeService.assertStudyDirectionInUniversity(request.getDirectionId(), uni);
         AcademicGroup group = AcademicGroup.builder()
                 .name(request.getName())
                 .course(request.getCourse())
@@ -85,28 +103,32 @@ public class AcademicGroupServiceImpl implements AcademicGroupService {
     @Override
     @Transactional
     public AcademicGroupResponse update(Long id, AcademicGroupRequest request, String adminEmail) {
-        Long uni = universityScopeService.requireAdminUniversityId(adminEmail);
-        universityScopeService.assertAcademicGroupInUniversity(id, uni);
-        universityScopeService.assertStudyDirectionInUniversity(request.getDirectionId(), uni);
         AcademicGroup group = academicGroupRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Academic group not found with id: " + id));
-        StudyDirection direction = studyDirectionRepository.findById(request.getDirectionId())
+        Long uni = universityScopeService.enforceAccessToEntityUniversity(adminEmail,
+                group.getDirection().getInstitute().getUniversity().getId());
+        universityScopeService.assertAcademicGroupInUniversity(id, uni);
+        StudyDirection newDir = studyDirectionRepository.findById(request.getDirectionId())
                 .orElseThrow(() -> new ResourceNotFoundException("Study direction not found with id: " + request.getDirectionId()));
+        universityScopeService.enforceAccessToEntityUniversity(adminEmail,
+                newDir.getInstitute().getUniversity().getId());
+        universityScopeService.assertStudyDirectionInUniversity(request.getDirectionId(),
+                newDir.getInstitute().getUniversity().getId());
         group.setName(request.getName());
         group.setCourse(request.getCourse());
         group.setYearOfAdmission(request.getYearOfAdmission());
-        group.setDirection(direction);
+        group.setDirection(newDir);
         return mapToResponse(academicGroupRepository.save(group));
     }
 
     @Override
     @Transactional
     public void delete(Long id, String adminEmail) {
-        Long uni = universityScopeService.requireAdminUniversityId(adminEmail);
+        AcademicGroup group = academicGroupRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Academic group not found with id: " + id));
+        Long uni = universityScopeService.enforceAccessToEntityUniversity(adminEmail,
+                group.getDirection().getInstitute().getUniversity().getId());
         universityScopeService.assertAcademicGroupInUniversity(id, uni);
-        if (!academicGroupRepository.existsById(id)) {
-            throw new ResourceNotFoundException("Academic group not found with id: " + id);
-        }
         academicGroupRepository.deleteById(id);
     }
 

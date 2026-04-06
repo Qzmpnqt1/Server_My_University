@@ -11,20 +11,19 @@ import org.example.exception.BadRequestException;
 import org.example.exception.ResourceNotFoundException;
 import org.example.model.*;
 import org.example.repository.StudentProfileRepository;
-import org.example.repository.TeacherProfileRepository;
 import org.example.repository.UsersRepository;
 import org.example.repository.cassandra.CassandraConversationRepository;
 import org.example.repository.cassandra.CassandraMessageRepository;
 import org.example.service.ChatService;
 import org.example.service.NotificationService;
 import org.example.service.UniversityScopeService;
+import org.example.service.ViewerUniversityResolver;
 import org.springframework.stereotype.Service;
 
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.util.Comparator;
 import java.util.List;
-import java.util.Objects;
 import java.util.UUID;
 
 @Service
@@ -32,26 +31,26 @@ public class ChatServiceImpl implements ChatService {
 
     private final UsersRepository usersRepository;
     private final StudentProfileRepository studentProfileRepository;
-    private final TeacherProfileRepository teacherProfileRepository;
     private final CassandraConversationRepository conversationRepo;
     private final CassandraMessageRepository messageRepo;
     private final NotificationService notificationService;
     private final UniversityScopeService universityScopeService;
+    private final ViewerUniversityResolver viewerUniversityResolver;
 
     public ChatServiceImpl(UsersRepository usersRepository,
                            StudentProfileRepository studentProfileRepository,
-                           TeacherProfileRepository teacherProfileRepository,
                            CassandraConversationRepository conversationRepo,
                            CassandraMessageRepository messageRepo,
                            NotificationService notificationService,
-                           UniversityScopeService universityScopeService) {
+                           UniversityScopeService universityScopeService,
+                           ViewerUniversityResolver viewerUniversityResolver) {
         this.usersRepository = usersRepository;
         this.studentProfileRepository = studentProfileRepository;
-        this.teacherProfileRepository = teacherProfileRepository;
         this.conversationRepo = conversationRepo;
         this.messageRepo = messageRepo;
         this.notificationService = notificationService;
         this.universityScopeService = universityScopeService;
+        this.viewerUniversityResolver = viewerUniversityResolver;
     }
 
     private void ensureCassandraAvailable() {
@@ -172,14 +171,20 @@ public class ChatServiceImpl implements ChatService {
      */
     private Long requireUniversityIdForMessaging(String email, Users self) {
         return switch (self.getUserType()) {
-            case ADMIN -> universityScopeService.requireAdminUniversityId(email);
+            case SUPER_ADMIN -> throw new BadRequestException(
+                    "Для суперадминистратора контакты чата пока недоступны без выбора вуза в клиенте");
+            case ADMIN -> universityScopeService.requireCampusUniversityId(email);
             case STUDENT -> studentProfileRepository.findFetchedByUserId(self.getId())
                     .map(sp -> sp.getInstitute().getUniversity().getId())
                     .orElseThrow(() -> new BadRequestException("Профиль студента не найден или не привязан к вузу"));
-            case TEACHER -> teacherProfileRepository.findFetchedByUserId(self.getId())
-                    .map(tp -> tp.getInstitute() != null ? tp.getInstitute().getUniversity().getId() : null)
-                    .filter(Objects::nonNull)
-                    .orElseThrow(() -> new BadRequestException("Профиль преподавателя не привязан к институту вуза"));
+            case TEACHER -> {
+                try {
+                    yield viewerUniversityResolver.requireUniversityIdForEmail(email);
+                } catch (AccessDeniedException ex) {
+                    throw new BadRequestException(
+                            "Не удалось определить вуз преподавателя: укажите вуз в профиле или дождитесь назначения дисциплин администратором");
+                }
+            }
             default -> throw new AccessDeniedException("Чат недоступен для данного типа пользователя");
         };
     }

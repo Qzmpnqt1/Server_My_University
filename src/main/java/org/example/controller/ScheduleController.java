@@ -30,6 +30,7 @@ public class ScheduleController {
     public ResponseEntity<List<ScheduleResponse>> query(
             @RequestParam(required = false) Long groupId,
             @RequestParam(required = false) Long teacherId,
+            @RequestParam(required = false) Long universityId,
             @RequestParam(required = false) Integer weekNumber,
             @RequestParam(required = false) Integer dayOfWeek,
             Principal principal) {
@@ -43,7 +44,7 @@ public class ScheduleController {
             return ResponseEntity.ok(scheduleService.getByTeacher(teacherId, weekNumber, dayOfWeek));
         }
         scheduleAuthorizationService.ensureAdmin(email);
-        return ResponseEntity.ok(scheduleService.getAllForAdmin(email));
+        return ResponseEntity.ok(scheduleService.getAllForAdmin(email, universityId));
     }
 
     @GetMapping("/my")
@@ -108,43 +109,49 @@ public class ScheduleController {
 
     @GetMapping("/compare/institutes")
     @PreAuthorize("hasAnyRole('STUDENT','TEACHER','ADMIN')")
-    public ResponseEntity<List<ScheduleCompareInstituteOptionResponse>> compareInstitutes(Principal principal) {
-        return ResponseEntity.ok(scheduleCompareService.listInstitutes(principal.getName()));
+    public ResponseEntity<List<ScheduleCompareInstituteOptionResponse>> compareInstitutes(
+            @RequestParam(required = false) Long universityId,
+            Principal principal) {
+        return ResponseEntity.ok(scheduleCompareService.listInstitutes(principal.getName(), universityId));
     }
 
     @GetMapping("/compare/directions")
     @PreAuthorize("hasAnyRole('STUDENT','TEACHER','ADMIN')")
     public ResponseEntity<List<ScheduleCompareDirectionOptionResponse>> compareDirections(
+            @RequestParam(required = false) Long universityId,
             @RequestParam Long instituteId,
             Principal principal) {
-        return ResponseEntity.ok(scheduleCompareService.listDirections(principal.getName(), instituteId));
+        return ResponseEntity.ok(scheduleCompareService.listDirections(principal.getName(), universityId, instituteId));
     }
 
     @GetMapping("/compare/groups")
     @PreAuthorize("hasAnyRole('STUDENT','TEACHER','ADMIN')")
     public ResponseEntity<List<ScheduleCompareGroupOptionResponse>> compareGroups(
+            @RequestParam(required = false) Long universityId,
             @RequestParam(required = false) Long instituteId,
             @RequestParam(required = false) Long directionId,
             @RequestParam(required = false) String q,
             Principal principal) {
         return ResponseEntity.ok(
-                scheduleCompareService.listGroups(principal.getName(), instituteId, directionId, q));
+                scheduleCompareService.listGroups(principal.getName(), universityId, instituteId, directionId, q));
     }
 
     @GetMapping("/compare/teachers")
     @PreAuthorize("hasAnyRole('STUDENT','TEACHER','ADMIN')")
     public ResponseEntity<List<ScheduleCompareTeacherOptionResponse>> compareTeachers(
+            @RequestParam(required = false) Long universityId,
             @RequestParam(required = false) String q,
             Principal principal) {
-        return ResponseEntity.ok(scheduleCompareService.listTeachers(principal.getName(), q));
+        return ResponseEntity.ok(scheduleCompareService.listTeachers(principal.getName(), universityId, q));
     }
 
     @GetMapping("/compare/classrooms")
     @PreAuthorize("hasAnyRole('STUDENT','TEACHER','ADMIN')")
     public ResponseEntity<List<ScheduleCompareClassroomOptionResponse>> compareClassrooms(
+            @RequestParam(required = false) Long universityId,
             @RequestParam(required = false) String q,
             Principal principal) {
-        return ResponseEntity.ok(scheduleCompareService.listClassrooms(principal.getName(), q));
+        return ResponseEntity.ok(scheduleCompareService.listClassrooms(principal.getName(), universityId, q));
     }
 
     @GetMapping("/{id}")

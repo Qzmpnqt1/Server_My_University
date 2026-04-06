@@ -79,7 +79,8 @@ class ScheduleServiceTest {
                 .dayOfWeek(1).startTime(LocalTime.of(9, 0)).endTime(LocalTime.of(10, 30)).weekNumber(1)
                 .build();
 
-        lenient().when(universityScopeService.requireAdminUniversityId("admin@test.ru")).thenReturn(1L);
+        lenient().when(universityScopeService.requireCampusUniversityId("admin@test.ru")).thenReturn(1L);
+        lenient().doNothing().when(universityScopeService).requireAdminOrSuperAdmin("admin@test.ru");
         lenient().doNothing().when(universityScopeService).assertSubjectDirectionInUniversity(anyLong(), eq(1L));
         lenient().doNothing().when(universityScopeService).assertAcademicGroupInUniversity(anyLong(), eq(1L));
         lenient().doNothing().when(universityScopeService).assertClassroomInUniversity(anyLong(), eq(1L));
@@ -115,7 +116,7 @@ class ScheduleServiceTest {
     @DisplayName("getAll returns all schedule entries")
     void getAll() {
         when(scheduleRepository.findAllByUniversityId(1L)).thenReturn(List.of(sampleSchedule));
-        List<ScheduleResponse> result = scheduleService.getAllForAdmin("admin@test.ru");
+        List<ScheduleResponse> result = scheduleService.getAllForAdmin("admin@test.ru", null);
         assertEquals(1, result.size());
         assertEquals("Математика", result.get(0).getSubjectName());
     }

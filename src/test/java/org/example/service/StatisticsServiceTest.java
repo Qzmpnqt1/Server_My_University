@@ -72,7 +72,8 @@ class StatisticsServiceTest {
 
         Users adminViewer = Users.builder().id(100L).email("viewer@test.ru").userType(UserType.ADMIN).build();
         lenient().when(usersRepository.findByEmail("viewer@test.ru")).thenReturn(Optional.of(adminViewer));
-        lenient().when(universityScopeService.requireAdminUniversityId("viewer@test.ru")).thenReturn(1L);
+        lenient().when(universityScopeService.enforceAccessToEntityUniversity(eq("viewer@test.ru"), anyLong()))
+                .thenAnswer(inv -> inv.getArgument(1));
         lenient().doNothing().when(universityScopeService).assertSubjectDirectionInUniversity(anyLong(), anyLong());
         lenient().doNothing().when(universityScopeService).assertAcademicGroupInUniversity(anyLong(), anyLong());
         lenient().doNothing().when(universityScopeService).assertStudyDirectionInUniversity(anyLong(), anyLong());

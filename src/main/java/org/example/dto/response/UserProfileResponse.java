@@ -7,6 +7,7 @@ import lombok.NoArgsConstructor;
 import org.example.model.UserType;
 
 import java.time.LocalDateTime;
+import java.util.List;
 
 @Data
 @Builder(toBuilder = true)
@@ -47,8 +48,14 @@ public class UserProfileResponse {
     public static class TeacherProfileInfo {
         /** id из teacher_profiles — для API назначений и расписания. */
         private Long teacherProfileId;
+        /** Вуз из заявки / профиля (без привязки к одному институту). */
+        private Long universityId;
+        private String universityName;
+        /** Устаревшее одиночное поле института в профиле (может быть null). */
         private Long instituteId;
         private String instituteName;
+        /** Институты по фактическим назначениям на дисциплины (может быть несколько). */
+        private List<String> institutesFromAssignments;
         private String position;
     }
 

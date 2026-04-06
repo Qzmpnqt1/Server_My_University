@@ -7,7 +7,7 @@ import java.util.List;
 
 public interface ScheduleService {
 
-    List<ScheduleResponse> getAllForAdmin(String adminEmail);
+    List<ScheduleResponse> getAllForAdmin(String adminEmail, Long universityIdFilter);
 
     ScheduleResponse getById(Long id);
 

@@ -1,9 +1,12 @@
 package org.example.controller;
 
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.example.dto.request.CreateAdminAccountRequest;
 import org.example.dto.response.UserProfileResponse;
 import org.example.model.UserType;
 import org.example.service.UserService;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
@@ -17,6 +20,15 @@ import java.util.List;
 public class UserController {
 
     private final UserService userService;
+
+    @PostMapping
+    @PreAuthorize("hasRole('SUPER_ADMIN')")
+    public ResponseEntity<UserProfileResponse> createAdminAccount(
+            @Valid @RequestBody CreateAdminAccountRequest request,
+            Principal principal) {
+        UserProfileResponse created = userService.createAdminAccount(request, principal.getName());
+        return ResponseEntity.status(HttpStatus.CREATED).body(created);
+    }
 
     @GetMapping
     @PreAuthorize("hasRole('ADMIN')")

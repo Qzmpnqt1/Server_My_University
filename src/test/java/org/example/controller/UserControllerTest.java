@@ -2,6 +2,7 @@ package org.example.controller;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.example.config.SecurityConfig;
+import org.example.dto.request.CreateAdminAccountRequest;
 import org.example.dto.response.UserProfileResponse;
 import org.example.exception.BadRequestException;
 import org.example.exception.GlobalExceptionHandler;
@@ -61,6 +62,16 @@ class UserControllerTest {
         when(jwtService.extractUsername("student-token")).thenReturn("student@uni.ru");
         when(jwtService.isTokenValid(eq("student-token"), any())).thenReturn(true);
         when(userDetailsService.loadUserByUsername("student@uni.ru")).thenReturn(studentUser);
+    }
+
+    private void mockSuperAdminAuth() {
+        User superUser = new User("super@moyvuz.local", "hash", true, true, true, true,
+                List.of(
+                        new SimpleGrantedAuthority("ROLE_SUPER_ADMIN"),
+                        new SimpleGrantedAuthority("ROLE_ADMIN")));
+        when(jwtService.extractUsername("super-token")).thenReturn("super@moyvuz.local");
+        when(jwtService.isTokenValid(eq("super-token"), any())).thenReturn(true);
+        when(userDetailsService.loadUserByUsername("super@moyvuz.local")).thenReturn(superUser);
     }
 
     @Test
@@ -195,6 +206,65 @@ class UserControllerTest {
                         .header("Authorization", "Bearer admin-token"))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.message").value("Нельзя деактивировать собственный аккаунт"));
+    }
+
+    @Test
+    @DisplayName("POST /api/v1/users — super admin creates another super admin")
+    void createAdminAccount_SuperAdmin_201() throws Exception {
+        mockSuperAdminAuth();
+
+        UserProfileResponse created = UserProfileResponse.builder()
+                .id(50L)
+                .email("newsuper@test.ru")
+                .firstName("Новый")
+                .lastName("Супер")
+                .userType(UserType.SUPER_ADMIN)
+                .isActive(true)
+                .createdAt(LocalDateTime.of(2026, 3, 1, 12, 0))
+                .build();
+
+        CreateAdminAccountRequest body = CreateAdminAccountRequest.builder()
+                .email("newsuper@test.ru")
+                .password("Secret1!")
+                .firstName("Новый")
+                .lastName("Супер")
+                .userType(UserType.SUPER_ADMIN)
+                .build();
+
+        when(userService.createAdminAccount(any(CreateAdminAccountRequest.class), eq("super@moyvuz.local")))
+                .thenReturn(created);
+
+        mockMvc.perform(post("/api/v1/users")
+                        .header("Authorization", "Bearer super-token")
+                        .contentType("application/json")
+                        .content(objectMapper.writeValueAsString(body)))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.email").value("newsuper@test.ru"))
+                .andExpect(jsonPath("$.userType").value("SUPER_ADMIN"));
+
+        verify(userService).createAdminAccount(any(CreateAdminAccountRequest.class), eq("super@moyvuz.local"));
+    }
+
+    @Test
+    @DisplayName("POST /api/v1/users — campus admin without SUPER_ADMIN role gets 403")
+    void createAdminAccount_CampusAdmin_403() throws Exception {
+        mockAdminAuth();
+
+        CreateAdminAccountRequest body = CreateAdminAccountRequest.builder()
+                .email("x@test.ru")
+                .password("Secret1!")
+                .firstName("A")
+                .lastName("B")
+                .userType(UserType.SUPER_ADMIN)
+                .build();
+
+        mockMvc.perform(post("/api/v1/users")
+                        .header("Authorization", "Bearer admin-token")
+                        .contentType("application/json")
+                        .content(objectMapper.writeValueAsString(body)))
+                .andExpect(status().isForbidden());
+
+        verify(userService, never()).createAdminAccount(any(), anyString());
     }
 
     @Test

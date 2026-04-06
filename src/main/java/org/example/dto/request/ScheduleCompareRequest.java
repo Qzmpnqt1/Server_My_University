@@ -35,6 +35,11 @@ public class ScheduleCompareRequest {
     /** null — все дни недели 1–7. */
     private Integer dayOfWeek;
 
+    /**
+     * Для {@link org.example.model.UserType#SUPER_ADMIN} в режиме FULL: вуз, в границах которого проверяются сущности.
+     */
+    private Long scopeUniversityId;
+
     public enum ScheduleCompareMode {
         MY_WITH_OTHER,
         FULL

@@ -30,11 +30,19 @@ public class UniversityServiceImpl implements UniversityService {
     @Override
     public List<UniversityResponse> getAll(String viewerEmail) {
         Optional<org.example.model.Users> viewer = resolveViewer(viewerEmail);
-        if (viewer.isPresent() && viewer.get().getUserType() == UserType.ADMIN) {
-            Long uniId = universityScopeService.requireAdminUniversityId(viewerEmail);
-            University u = universityRepository.findById(uniId)
-                    .orElseThrow(() -> new ResourceNotFoundException("University not found with id: " + uniId));
-            return List.of(mapToResponse(u));
+        if (viewer.isPresent()) {
+            UserType t = viewer.get().getUserType();
+            if (t == UserType.ADMIN || t == UserType.SUPER_ADMIN) {
+                var scope = universityScopeService.resolveAdminListScope(viewerEmail, null);
+                if (scope.allUniversities()) {
+                    return universityRepository.findAll().stream()
+                            .map(this::mapToResponse)
+                            .collect(Collectors.toList());
+                }
+                University u = universityRepository.findById(scope.universityId())
+                        .orElseThrow(() -> new ResourceNotFoundException("University not found with id: " + scope.universityId()));
+                return List.of(mapToResponse(u));
+            }
         }
         return universityRepository.findAll().stream()
                 .map(this::mapToResponse)
@@ -47,7 +55,7 @@ public class UniversityServiceImpl implements UniversityService {
                 .orElseThrow(() -> new ResourceNotFoundException("University not found with id: " + id));
         resolveViewer(viewerEmail).ifPresent(u -> {
             if (u.getUserType() == UserType.ADMIN) {
-                Long uniId = universityScopeService.requireAdminUniversityId(viewerEmail);
+                Long uniId = universityScopeService.requireCampusUniversityId(viewerEmail);
                 universityScopeService.assertUniversityMatches(id, uniId);
             }
         });
@@ -57,15 +65,30 @@ public class UniversityServiceImpl implements UniversityService {
     @Override
     @Transactional
     public UniversityResponse create(UniversityRequest request, String adminEmail) {
-        universityScopeService.requireAdminUniversityId(adminEmail);
-        throw new AccessDeniedException("Создание вуза недоступно администратору вуза");
+        org.example.model.Users actor = usersRepository.findByEmail(adminEmail)
+                .orElseThrow(() -> new ResourceNotFoundException("Пользователь не найден"));
+        universityScopeService.requireAdminOrSuperAdmin(adminEmail);
+        if (actor.getUserType() != UserType.SUPER_ADMIN) {
+            throw new AccessDeniedException("Создание вуза недоступно администратору вуза");
+        }
+        University university = University.builder()
+                .name(request.getName())
+                .shortName(request.getShortName())
+                .city(request.getCity())
+                .build();
+        return mapToResponse(universityRepository.save(university));
     }
 
     @Override
     @Transactional
     public UniversityResponse update(Long id, UniversityRequest request, String adminEmail) {
-        Long uniId = universityScopeService.requireAdminUniversityId(adminEmail);
-        universityScopeService.assertUniversityMatches(id, uniId);
+        universityScopeService.requireAdminOrSuperAdmin(adminEmail);
+        org.example.model.Users actor = usersRepository.findByEmail(adminEmail)
+                .orElseThrow(() -> new ResourceNotFoundException("Пользователь не найден"));
+        if (actor.getUserType() == UserType.ADMIN) {
+            Long uniId = universityScopeService.requireCampusUniversityId(adminEmail);
+            universityScopeService.assertUniversityMatches(id, uniId);
+        }
         University university = universityRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("University not found with id: " + id));
         university.setName(request.getName());
@@ -77,8 +100,16 @@ public class UniversityServiceImpl implements UniversityService {
     @Override
     @Transactional
     public void delete(Long id, String adminEmail) {
-        universityScopeService.requireAdminUniversityId(adminEmail);
-        throw new AccessDeniedException("Удаление вуза недоступно администратору вуза");
+        org.example.model.Users actor = usersRepository.findByEmail(adminEmail)
+                .orElseThrow(() -> new ResourceNotFoundException("Пользователь не найден"));
+        universityScopeService.requireAdminOrSuperAdmin(adminEmail);
+        if (actor.getUserType() != UserType.SUPER_ADMIN) {
+            throw new AccessDeniedException("Удаление вуза недоступно администратору вуза");
+        }
+        if (!universityRepository.existsById(id)) {
+            throw new ResourceNotFoundException("University not found with id: " + id);
+        }
+        universityRepository.deleteById(id);
     }
 
     private Optional<org.example.model.Users> resolveViewer(String viewerEmail) {

@@ -161,8 +161,10 @@ public class PracticeGradeServiceImpl implements PracticeGradeService {
         if (user.getUserType() == UserType.TEACHER) {
             verifyTeacherOwnership(user, practice.getSubjectDirection());
         } else if (user.getUserType() == UserType.ADMIN) {
-            Long uni = universityScopeService.requireAdminUniversityId(email);
+            Long uni = universityScopeService.requireCampusUniversityId(email);
             universityScopeService.assertSubjectDirectionInUniversity(practice.getSubjectDirection().getId(), uni);
+        } else if (user.getUserType() != UserType.SUPER_ADMIN) {
+            throw new AccessDeniedException("Недостаточно прав");
         }
 
         return practiceGradeRepository.findByPracticeId(practiceId).stream()
@@ -185,12 +187,17 @@ public class PracticeGradeServiceImpl implements PracticeGradeService {
         SubjectPractice practice = subjectPracticeRepository.findById(request.getPracticeId())
                 .orElseThrow(() -> new ResourceNotFoundException("Практическая работа не найдена"));
 
-        if (currentUser.getUserType() != UserType.ADMIN) {
+        if (currentUser.getUserType() == UserType.TEACHER) {
             verifyTeacherOwnership(currentUser, practice.getSubjectDirection());
-        } else {
-            Long uni = universityScopeService.requireAdminUniversityId(email);
+        } else if (currentUser.getUserType() == UserType.ADMIN
+                || currentUser.getUserType() == UserType.SUPER_ADMIN) {
+            SubjectInDirection sid = practice.getSubjectDirection();
+            Long uni = sid.getDirection().getInstitute().getUniversity().getId();
+            universityScopeService.enforceAccessToEntityUniversity(email, uni);
             universityScopeService.assertUserInUniversity(request.getStudentId(), uni);
             universityScopeService.assertSubjectDirectionInUniversity(practice.getSubjectDirection().getId(), uni);
+        } else {
+            throw new AccessDeniedException("Недостаточно прав");
         }
 
         assertStudentEligibleForPractice(student, practice, request.getGroupId());
@@ -228,13 +235,18 @@ public class PracticeGradeServiceImpl implements PracticeGradeService {
         PracticeGrade practiceGrade = practiceGradeRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Оценка за практику не найдена"));
 
-        if (currentUser.getUserType() != UserType.ADMIN) {
+        if (currentUser.getUserType() == UserType.TEACHER) {
             verifyTeacherOwnership(currentUser, practiceGrade.getPractice().getSubjectDirection());
-        } else {
-            Long uni = universityScopeService.requireAdminUniversityId(email);
+        } else if (currentUser.getUserType() == UserType.ADMIN
+                || currentUser.getUserType() == UserType.SUPER_ADMIN) {
+            SubjectInDirection sid = practiceGrade.getPractice().getSubjectDirection();
+            Long uni = sid.getDirection().getInstitute().getUniversity().getId();
+            universityScopeService.enforceAccessToEntityUniversity(email, uni);
             universityScopeService.assertUserInUniversity(practiceGrade.getStudent().getId(), uni);
             universityScopeService.assertSubjectDirectionInUniversity(
                     practiceGrade.getPractice().getSubjectDirection().getId(), uni);
+        } else {
+            throw new AccessDeniedException("Недостаточно прав");
         }
 
         assertStudentEligibleForPractice(practiceGrade.getStudent(), practiceGrade.getPractice(), request.getGroupId());

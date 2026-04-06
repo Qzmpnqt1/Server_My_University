@@ -34,8 +34,13 @@ public class SubjectPracticeServiceImpl implements SubjectPracticeService {
     public List<SubjectPracticeResponse> getBySubjectDirection(Long subjectDirectionId, String viewerEmail) {
         resolveViewer(viewerEmail).ifPresent(u -> {
             if (u.getUserType() == UserType.ADMIN) {
-                Long uni = universityScopeService.requireAdminUniversityId(viewerEmail);
+                Long uni = universityScopeService.requireCampusUniversityId(viewerEmail);
                 universityScopeService.assertSubjectDirectionInUniversity(subjectDirectionId, uni);
+            } else if (u.getUserType() == UserType.SUPER_ADMIN) {
+                SubjectInDirection sd = subjectInDirectionRepository.findById(subjectDirectionId)
+                        .orElseThrow(() -> new ResourceNotFoundException("SubjectInDirection not found with id: " + subjectDirectionId));
+                universityScopeService.enforceAccessToEntityUniversity(viewerEmail,
+                        sd.getDirection().getInstitute().getUniversity().getId());
             }
         });
         return subjectPracticeRepository.findBySubjectDirectionId(subjectDirectionId).stream()
@@ -49,8 +54,11 @@ public class SubjectPracticeServiceImpl implements SubjectPracticeService {
                 .orElseThrow(() -> new ResourceNotFoundException("SubjectPractice not found with id: " + id));
         resolveViewer(viewerEmail).ifPresent(u -> {
             if (u.getUserType() == UserType.ADMIN) {
-                Long uni = universityScopeService.requireAdminUniversityId(viewerEmail);
+                Long uni = universityScopeService.requireCampusUniversityId(viewerEmail);
                 universityScopeService.assertSubjectDirectionInUniversity(entity.getSubjectDirection().getId(), uni);
+            } else if (u.getUserType() == UserType.SUPER_ADMIN) {
+                Long uni = entity.getSubjectDirection().getDirection().getInstitute().getUniversity().getId();
+                universityScopeService.enforceAccessToEntityUniversity(viewerEmail, uni);
             }
         });
         return mapToResponse(entity);
@@ -59,10 +67,11 @@ public class SubjectPracticeServiceImpl implements SubjectPracticeService {
     @Override
     @Transactional
     public SubjectPracticeResponse create(SubjectPracticeRequest request, String adminEmail) {
-        Long uni = universityScopeService.requireAdminUniversityId(adminEmail);
-        universityScopeService.assertSubjectDirectionInUniversity(request.getSubjectDirectionId(), uni);
         SubjectInDirection subjectDirection = subjectInDirectionRepository.findById(request.getSubjectDirectionId())
                 .orElseThrow(() -> new ResourceNotFoundException("SubjectInDirection not found with id: " + request.getSubjectDirectionId()));
+        Long uni = universityScopeService.enforceAccessToEntityUniversity(adminEmail,
+                subjectDirection.getDirection().getInstitute().getUniversity().getId());
+        universityScopeService.assertSubjectDirectionInUniversity(request.getSubjectDirectionId(), uni);
         SubjectPractice entity = SubjectPractice.builder()
                 .subjectDirection(subjectDirection)
                 .practiceNumber(request.getPracticeNumber())
@@ -76,13 +85,17 @@ public class SubjectPracticeServiceImpl implements SubjectPracticeService {
     @Override
     @Transactional
     public SubjectPracticeResponse update(Long id, SubjectPracticeRequest request, String adminEmail) {
-        Long uni = universityScopeService.requireAdminUniversityId(adminEmail);
         SubjectPractice entity = subjectPracticeRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("SubjectPractice not found with id: " + id));
+        Long uni = universityScopeService.enforceAccessToEntityUniversity(adminEmail,
+                entity.getSubjectDirection().getDirection().getInstitute().getUniversity().getId());
         universityScopeService.assertSubjectDirectionInUniversity(entity.getSubjectDirection().getId(), uni);
-        universityScopeService.assertSubjectDirectionInUniversity(request.getSubjectDirectionId(), uni);
         SubjectInDirection subjectDirection = subjectInDirectionRepository.findById(request.getSubjectDirectionId())
                 .orElseThrow(() -> new ResourceNotFoundException("SubjectInDirection not found with id: " + request.getSubjectDirectionId()));
+        universityScopeService.enforceAccessToEntityUniversity(adminEmail,
+                subjectDirection.getDirection().getInstitute().getUniversity().getId());
+        universityScopeService.assertSubjectDirectionInUniversity(request.getSubjectDirectionId(),
+                subjectDirection.getDirection().getInstitute().getUniversity().getId());
         entity.setSubjectDirection(subjectDirection);
         entity.setPracticeNumber(request.getPracticeNumber());
         entity.setPracticeTitle(request.getPracticeTitle());
@@ -94,9 +107,10 @@ public class SubjectPracticeServiceImpl implements SubjectPracticeService {
     @Override
     @Transactional
     public void delete(Long id, String adminEmail) {
-        Long uni = universityScopeService.requireAdminUniversityId(adminEmail);
         SubjectPractice entity = subjectPracticeRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("SubjectPractice not found with id: " + id));
+        Long uni = universityScopeService.enforceAccessToEntityUniversity(adminEmail,
+                entity.getSubjectDirection().getDirection().getInstitute().getUniversity().getId());
         universityScopeService.assertSubjectDirectionInUniversity(entity.getSubjectDirection().getId(), uni);
         subjectPracticeRepository.deleteById(id);
     }

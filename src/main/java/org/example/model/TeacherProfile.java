@@ -22,6 +22,12 @@ public class TeacherProfile {
     @JoinColumn(name = "user_id", nullable = false, unique = true)
     private Users user;
 
+    /** Вуз, в котором работает преподаватель (из заявки на регистрации). Институты — через teacher_subjects. */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "university_id")
+    private University university;
+
+    /** Устаревшее одиночное поле; может быть null. Актуальные институты — из назначенных дисциплин. */
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "institute_id")
     private Institute institute;
