@@ -159,7 +159,11 @@ public final class RussianSort {
     }
 
     public static Comparator<SubjectLessonTypeResponse> subjectLessonTypes() {
-        return byText(s -> s.getLessonType() == null ? "" : s.getLessonType().name())
+        return Comparator
+                .comparing(
+                        (SubjectLessonTypeResponse s) ->
+                                s.getLessonType() == null ? "" : s.getLessonType().name(),
+                        RussianSort::compareText)
                 .thenComparing(SubjectLessonTypeResponse::getId, Comparator.nullsLast(Long::compareTo));
     }
 }
