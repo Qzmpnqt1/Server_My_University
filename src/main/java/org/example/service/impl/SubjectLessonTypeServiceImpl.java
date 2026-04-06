@@ -13,6 +13,7 @@ import org.example.repository.SubjectLessonTypeRepository;
 import org.example.repository.UsersRepository;
 import org.example.service.SubjectLessonTypeService;
 import org.example.service.UniversityScopeService;
+import org.example.util.RussianSort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -41,10 +42,12 @@ public class SubjectLessonTypeServiceImpl implements SubjectLessonTypeService {
                     universityScopeService.assertSubjectDirectionInUniversity(subjectDirectionId, uni);
                     return subjectLessonTypeRepository.findBySubjectDirectionId(subjectDirectionId).stream()
                             .map(this::mapToResponse)
+                            .sorted(RussianSort.subjectLessonTypes())
                             .collect(Collectors.toList());
                 }
                 return subjectLessonTypeRepository.findByUniversityId(uni).stream()
                         .map(this::mapToResponse)
+                        .sorted(RussianSort.subjectLessonTypes())
                         .collect(Collectors.toList());
             }
             if (t == UserType.SUPER_ADMIN) {
@@ -55,10 +58,12 @@ public class SubjectLessonTypeServiceImpl implements SubjectLessonTypeService {
                             sd.getDirection().getInstitute().getUniversity().getId());
                     return subjectLessonTypeRepository.findBySubjectDirectionId(subjectDirectionId).stream()
                             .map(this::mapToResponse)
+                            .sorted(RussianSort.subjectLessonTypes())
                             .collect(Collectors.toList());
                 }
                 return subjectLessonTypeRepository.findAll().stream()
                         .map(this::mapToResponse)
+                        .sorted(RussianSort.subjectLessonTypes())
                         .collect(Collectors.toList());
             }
         }
@@ -67,6 +72,7 @@ public class SubjectLessonTypeServiceImpl implements SubjectLessonTypeService {
                 : subjectLessonTypeRepository.findAll();
         return list.stream()
                 .map(this::mapToResponse)
+                .sorted(RussianSort.subjectLessonTypes())
                 .collect(Collectors.toList());
     }
 

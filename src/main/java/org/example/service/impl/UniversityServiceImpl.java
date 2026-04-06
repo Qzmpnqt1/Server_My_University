@@ -11,9 +11,11 @@ import org.example.repository.UniversityRepository;
 import org.example.repository.UsersRepository;
 import org.example.service.UniversityService;
 import org.example.service.UniversityScopeService;
+import org.example.util.RussianSort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.Comparator;
 import java.util.List;
 import java.util.Optional;
 import java.util.stream.Collectors;
@@ -37,6 +39,8 @@ public class UniversityServiceImpl implements UniversityService {
                 if (scope.allUniversities()) {
                     return universityRepository.findAll().stream()
                             .map(this::mapToResponse)
+                            .sorted(RussianSort.byText(UniversityResponse::getName)
+                                    .thenComparing(UniversityResponse::getId, Comparator.nullsLast(Long::compareTo)))
                             .collect(Collectors.toList());
                 }
                 University u = universityRepository.findById(scope.universityId())
@@ -46,6 +50,8 @@ public class UniversityServiceImpl implements UniversityService {
         }
         return universityRepository.findAll().stream()
                 .map(this::mapToResponse)
+                .sorted(RussianSort.byText(UniversityResponse::getName)
+                        .thenComparing(UniversityResponse::getId, Comparator.nullsLast(Long::compareTo)))
                 .collect(Collectors.toList());
     }
 

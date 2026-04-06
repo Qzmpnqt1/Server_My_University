@@ -7,7 +7,10 @@ import java.util.List;
 
 public interface SubjectInDirectionService {
 
-    List<SubjectInDirectionResponse> getAll(Long directionId, String viewerEmail);
+    /**
+     * @param universityId для SUPER_ADMIN без directionId: null — все вузы, иначе фильтр по вузу; для ADMIN игнорируется при выборке по вузу кампуса.
+     */
+    List<SubjectInDirectionResponse> getAll(Long directionId, Long universityId, String viewerEmail);
 
     SubjectInDirectionResponse getById(Long id, String viewerEmail);
 

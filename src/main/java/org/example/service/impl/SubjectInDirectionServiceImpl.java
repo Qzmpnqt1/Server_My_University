@@ -11,9 +11,12 @@ import org.example.repository.SubjectRepository;
 import org.example.repository.UsersRepository;
 import org.example.service.SubjectInDirectionService;
 import org.example.service.UniversityScopeService;
+import org.example.service.UniversityScopeService.AdminQueryScope;
+import org.example.util.RussianSort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import java.util.stream.Collectors;
@@ -30,13 +33,15 @@ public class SubjectInDirectionServiceImpl implements SubjectInDirectionService 
     private final UniversityScopeService universityScopeService;
 
     @Override
-    public List<SubjectInDirectionResponse> getAll(Long directionId, String viewerEmail) {
-        return listEntities(directionId, viewerEmail).stream()
+    public List<SubjectInDirectionResponse> getAll(Long directionId, Long universityId, String viewerEmail) {
+        List<SubjectInDirection> entities = new ArrayList<>(listEntities(directionId, universityId, viewerEmail));
+        RussianSort.sortSubjectInDirectionEntities(entities);
+        return entities.stream()
                 .map(this::mapToResponse)
                 .collect(Collectors.toList());
     }
 
-    private List<SubjectInDirection> listEntities(Long directionId, String viewerEmail) {
+    private List<SubjectInDirection> listEntities(Long directionId, Long universityId, String viewerEmail) {
         Optional<Users> viewer = resolveViewer(viewerEmail);
         if (viewer.isPresent()) {
             UserType t = viewer.get().getUserType();
@@ -56,7 +61,11 @@ public class SubjectInDirectionServiceImpl implements SubjectInDirectionService 
                             d.getInstitute().getUniversity().getId());
                     return subjectInDirectionRepository.findByDirectionId(directionId);
                 }
-                return subjectInDirectionRepository.findAll();
+                AdminQueryScope scope = universityScopeService.resolveAdminQueryScope(viewerEmail, universityId);
+                if (scope.globalAllUniversities()) {
+                    return subjectInDirectionRepository.findAll();
+                }
+                return subjectInDirectionRepository.findByDirection_Institute_University_Id(scope.universityId());
             }
         }
         if (directionId != null) {

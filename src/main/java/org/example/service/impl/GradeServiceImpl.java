@@ -15,10 +15,12 @@ import org.example.service.AuditService;
 import org.example.service.GradeService;
 import org.example.service.NotificationService;
 import org.example.service.UniversityScopeService;
+import org.example.util.RussianSort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -57,7 +59,8 @@ public class GradeServiceImpl implements GradeService {
             throw new AccessDeniedException("Только студенты могут просматривать свои оценки");
         }
 
-        List<Grade> grades = gradeRepository.findByStudentId(user.getId());
+        List<Grade> grades = new ArrayList<>(gradeRepository.findByStudentId(user.getId()));
+        grades.sort(RussianSort.gradeEntityBySubjectPlanComparator());
         if (grades.isEmpty()) {
             return List.of();
         }
@@ -102,7 +105,8 @@ public class GradeServiceImpl implements GradeService {
             // глобальный просмотр
         }
 
-        List<Grade> list = gradeRepository.findByStudentId(studentId);
+        List<Grade> list = new ArrayList<>(gradeRepository.findByStudentId(studentId));
+        list.sort(RussianSort.gradeEntityBySubjectPlanComparator());
         if (list.isEmpty()) {
             return List.of();
         }
@@ -135,7 +139,8 @@ public class GradeServiceImpl implements GradeService {
             throw new AccessDeniedException("Недостаточно прав");
         }
 
-        List<Grade> list = gradeRepository.findBySubjectDirectionId(subjectDirectionId);
+        List<Grade> list = new ArrayList<>(gradeRepository.findBySubjectDirectionId(subjectDirectionId));
+        list.sort(RussianSort.gradeEntityByStudentNameComparator());
         int pc = (int) subjectPracticeRepository.countBySubjectDirectionId(subjectDirectionId);
         return list.stream()
                 .map(g -> mapToResponse(g, pc))
@@ -167,7 +172,9 @@ public class GradeServiceImpl implements GradeService {
             }
         }
 
-        List<SubjectPractice> practices = subjectPracticeRepository.findBySubjectDirectionId(subjectDirectionId);
+        List<SubjectPractice> practices = new ArrayList<>(
+                subjectPracticeRepository.findBySubjectDirectionId(subjectDirectionId));
+        RussianSort.sortSubjectPractices(practices);
         int practiceCountForGrades = (int) subjectPracticeRepository.countBySubjectDirectionId(subjectDirectionId);
         List<TeacherJournalResponse.StudentRow> rows = new ArrayList<>();
         for (StudentProfile sp : byUser.values()) {
@@ -184,6 +191,8 @@ public class GradeServiceImpl implements GradeService {
                 Optional<PracticeGrade> optPg = practiceGradeRepository.findByStudentIdAndPracticeId(st.getId(), pr.getId());
                 pRows.add(mapPracticeSlot(st, pr, optPg.orElse(null)));
             }
+            pRows.sort(Comparator.comparing(PracticeGradeResponse::getPracticeNumber, Comparator.nullsLast(Integer::compareTo))
+                    .thenComparing(PracticeGradeResponse::getPracticeId, Comparator.nullsLast(Long::compareTo)));
             rows.add(TeacherJournalResponse.StudentRow.builder()
                     .studentUserId(st.getId())
                     .studentName(name)
@@ -192,6 +201,9 @@ public class GradeServiceImpl implements GradeService {
                     .practiceGrades(pRows)
                     .build());
         }
+
+        rows.sort(Comparator.comparing(TeacherJournalResponse.StudentRow::getStudentName, RussianSort::compareText)
+                .thenComparing(TeacherJournalResponse.StudentRow::getStudentUserId, Comparator.nullsLast(Long::compareTo)));
 
         return TeacherJournalResponse.builder()
                 .subjectDirectionId(subjectDirectionId)

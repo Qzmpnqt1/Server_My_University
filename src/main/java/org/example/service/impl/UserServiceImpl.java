@@ -13,6 +13,7 @@ import org.example.repository.*;
 import org.example.service.AuditService;
 import org.example.service.UniversityScopeService;
 import org.example.service.UserService;
+import org.example.util.RussianSort;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -57,7 +58,7 @@ public class UserServiceImpl implements UserService {
         }
         final String q = searchQuery == null ? null : searchQuery.trim().toLowerCase();
         final Long filterUni = scopeUniversityId;
-        return usersRepository.findAll().stream()
+        List<UserProfileResponse> out = usersRepository.findAll().stream()
                 .filter(u -> userType == null || u.getUserType() == userType)
                 .filter(u -> isActive == null || Objects.equals(isActive, u.getIsActive()))
                 .filter(u -> groupId == null || matchesGroup(u, groupId))
@@ -66,6 +67,8 @@ public class UserServiceImpl implements UserService {
                 .filter(u -> q == null || q.isEmpty() || matchesNameSearch(u, q))
                 .map(this::toFullResponse)
                 .collect(Collectors.toList());
+        out.sort(RussianSort.userProfiles());
+        return out;
     }
 
     private boolean matchesNameSearch(Users u, String needleLower) {

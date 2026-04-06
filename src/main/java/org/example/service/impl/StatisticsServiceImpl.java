@@ -8,6 +8,7 @@ import org.example.model.*;
 import org.example.repository.*;
 import org.example.service.StatisticsService;
 import org.example.service.UniversityScopeService;
+import org.example.util.RussianSort;
 import org.example.util.StatisticsFinalAssessmentUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -106,7 +107,9 @@ public class StatisticsServiceImpl implements StatisticsService {
                 .orElseThrow(() -> new ResourceNotFoundException("Предмет в направлении не найден"));
         ensureSubjectDirectionAccess(sid, viewerEmail);
 
-        List<SubjectPractice> practices = subjectPracticeRepository.findBySubjectDirectionId(subjectDirectionId);
+        List<SubjectPractice> practices = new ArrayList<>(
+                subjectPracticeRepository.findBySubjectDirectionId(subjectDirectionId));
+        RussianSort.sortSubjectPractices(practices);
 
         List<PracticeStatisticsResponse.PracticeDetail> details = new ArrayList<>();
         int totalWith = 0, totalExpected = 0;
@@ -290,6 +293,9 @@ public class StatisticsServiceImpl implements StatisticsService {
             collectGradesForGroup(g.getId(), allGrades);
         }
 
+        summaries.sort(Comparator.comparing(DirectionStatisticsResponse.GroupSummary::getGroupName, RussianSort::compareText)
+                .thenComparing(DirectionStatisticsResponse.GroupSummary::getGroupId, Comparator.nullsLast(Long::compareTo)));
+
         return DirectionStatisticsResponse.builder()
                 .directionId(directionId)
                 .directionName(dir.getName())
@@ -326,6 +332,9 @@ public class StatisticsServiceImpl implements StatisticsService {
                 collectGradesForGroup(g.getId(), allGrades);
             }
         }
+
+        summaries.sort(Comparator.comparing(InstituteStatisticsResponse.DirectionSummary::getDirectionName, RussianSort::compareText)
+                .thenComparing(InstituteStatisticsResponse.DirectionSummary::getDirectionId, Comparator.nullsLast(Long::compareTo)));
 
         return InstituteStatisticsResponse.builder()
                 .instituteId(instituteId)
@@ -366,6 +375,9 @@ public class StatisticsServiceImpl implements StatisticsService {
                 }
             }
         }
+
+        summaries.sort(Comparator.comparing(UniversityStatisticsResponse.InstituteSummary::getInstituteName, RussianSort::compareText)
+                .thenComparing(UniversityStatisticsResponse.InstituteSummary::getInstituteId, Comparator.nullsLast(Long::compareTo)));
 
         return UniversityStatisticsResponse.builder()
                 .universityId(universityId)

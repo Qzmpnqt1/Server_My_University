@@ -7,7 +7,11 @@ import java.util.List;
 
 public interface SubjectService {
 
-    List<SubjectResponse> getAll();
+    /**
+     * @param requestUniversityId для SUPER_ADMIN: null — все предметы; для ADMIN игнорируется при выводе (берётся кампус).
+     * @param viewerEmail       email из Principal или null для гостя/без контекста
+     */
+    List<SubjectResponse> getAll(Long requestUniversityId, String viewerEmail);
 
     SubjectResponse getById(Long id);
 

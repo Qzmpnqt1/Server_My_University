@@ -10,6 +10,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
+import java.security.Principal;
 import java.util.List;
 
 @RestController
@@ -19,9 +20,17 @@ public class SubjectController {
 
     private final SubjectService subjectService;
 
+    private static String emailOrNull(Principal principal) {
+        if (principal == null) return null;
+        String n = principal.getName();
+        return (n == null || n.isBlank() || "anonymousUser".equals(n)) ? null : n;
+    }
+
     @GetMapping
-    public ResponseEntity<List<SubjectResponse>> getAll() {
-        return ResponseEntity.ok(subjectService.getAll());
+    public ResponseEntity<List<SubjectResponse>> getAll(
+            @RequestParam(required = false) Long universityId,
+            Principal principal) {
+        return ResponseEntity.ok(subjectService.getAll(universityId, emailOrNull(principal)));
     }
 
     @GetMapping("/{id}")

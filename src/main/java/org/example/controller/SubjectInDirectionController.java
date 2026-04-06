@@ -29,8 +29,9 @@ public class SubjectInDirectionController {
     @GetMapping
     public ResponseEntity<List<SubjectInDirectionResponse>> getAll(
             @RequestParam(required = false) Long directionId,
+            @RequestParam(required = false) Long universityId,
             Principal principal) {
-        return ResponseEntity.ok(subjectInDirectionService.getAll(directionId, emailOrNull(principal)));
+        return ResponseEntity.ok(subjectInDirectionService.getAll(directionId, universityId, emailOrNull(principal)));
     }
 
     @GetMapping("/{id}")

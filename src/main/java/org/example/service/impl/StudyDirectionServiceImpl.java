@@ -14,9 +14,11 @@ import org.example.repository.UsersRepository;
 import org.example.service.StudyDirectionService;
 import org.example.service.UniversityScopeService;
 import org.example.service.UniversityScopeService.AdminQueryScope;
+import org.example.util.RussianSort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.Comparator;
 import java.util.List;
 import java.util.Optional;
 import java.util.stream.Collectors;
@@ -48,15 +50,24 @@ public class StudyDirectionServiceImpl implements StudyDirectionService {
                     }
                     return studyDirectionRepository.findByInstituteId(instituteId).stream()
                             .map(this::mapToResponse)
+                            .sorted(RussianSort.byText(StudyDirectionResponse::getName)
+                                    .thenComparing(StudyDirectionResponse::getCode, RussianSort::compareText)
+                                    .thenComparing(StudyDirectionResponse::getId, Comparator.nullsLast(Long::compareTo)))
                             .collect(Collectors.toList());
                 }
                 if (!scope.globalAllUniversities()) {
                     return studyDirectionRepository.findByInstitute_University_Id(scope.universityId()).stream()
                             .map(this::mapToResponse)
+                            .sorted(RussianSort.byText(StudyDirectionResponse::getName)
+                                    .thenComparing(StudyDirectionResponse::getCode, RussianSort::compareText)
+                                    .thenComparing(StudyDirectionResponse::getId, Comparator.nullsLast(Long::compareTo)))
                             .collect(Collectors.toList());
                 }
                 return studyDirectionRepository.findAll().stream()
                         .map(this::mapToResponse)
+                        .sorted(RussianSort.byText(StudyDirectionResponse::getName)
+                                .thenComparing(StudyDirectionResponse::getCode, RussianSort::compareText)
+                                .thenComparing(StudyDirectionResponse::getId, Comparator.nullsLast(Long::compareTo)))
                         .collect(Collectors.toList());
             }
         }
@@ -70,6 +81,9 @@ public class StudyDirectionServiceImpl implements StudyDirectionService {
         }
         return directions.stream()
                 .map(this::mapToResponse)
+                .sorted(RussianSort.byText(StudyDirectionResponse::getName)
+                        .thenComparing(StudyDirectionResponse::getCode, RussianSort::compareText)
+                        .thenComparing(StudyDirectionResponse::getId, Comparator.nullsLast(Long::compareTo)))
                 .collect(Collectors.toList());
     }
 

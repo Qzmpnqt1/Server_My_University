@@ -13,6 +13,7 @@ import org.example.repository.UniversityRepository;
 import org.example.repository.UsersRepository;
 import org.example.service.ClassroomService;
 import org.example.service.UniversityScopeService;
+import org.example.util.RussianSort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -40,10 +41,12 @@ public class ClassroomServiceImpl implements ClassroomService {
                 if (scope.allUniversities()) {
                     return classroomRepository.findAll().stream()
                             .map(this::mapToResponse)
+                            .sorted(RussianSort.classroomResponses())
                             .collect(Collectors.toList());
                 }
                 return classroomRepository.findByUniversityId(scope.universityId()).stream()
                         .map(this::mapToResponse)
+                        .sorted(RussianSort.classroomResponses())
                         .collect(Collectors.toList());
             }
         }
@@ -52,6 +55,7 @@ public class ClassroomServiceImpl implements ClassroomService {
                 : classroomRepository.findAll();
         return classrooms.stream()
                 .map(this::mapToResponse)
+                .sorted(RussianSort.classroomResponses())
                 .collect(Collectors.toList());
     }
 

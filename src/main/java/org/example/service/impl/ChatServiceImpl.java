@@ -19,11 +19,11 @@ import org.example.service.ChatService;
 import org.example.service.NotificationService;
 import org.example.service.UniversityScopeService;
 import org.example.service.ViewerUniversityResolver;
+import org.example.util.RussianSort;
 import org.springframework.stereotype.Service;
 
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
-import java.util.Comparator;
 import java.util.List;
 import java.util.UUID;
 
@@ -74,8 +74,7 @@ public class ChatServiceImpl implements ChatService {
                 stream = stream.filter(u -> universityScopeService.userBelongsToUniversity(u.getId(), uni));
             }
             return stream
-                    .sorted(Comparator.comparing(Users::getLastName, Comparator.nullsLast(String::compareToIgnoreCase))
-                            .thenComparing(Users::getFirstName, Comparator.nullsLast(String::compareToIgnoreCase)))
+                    .sorted(RussianSort::compareUsersByName)
                     .map(this::toChatContact)
                     .toList();
         }
@@ -84,8 +83,7 @@ public class ChatServiceImpl implements ChatService {
                 .filter(u -> !u.getId().equals(self.getId()))
                 .filter(u -> Boolean.TRUE.equals(u.getIsActive()))
                 .filter(u -> universityScopeService.userBelongsToUniversity(u.getId(), scopeUni))
-                .sorted(Comparator.comparing(Users::getLastName, Comparator.nullsLast(String::compareToIgnoreCase))
-                        .thenComparing(Users::getFirstName, Comparator.nullsLast(String::compareToIgnoreCase)))
+                .sorted(RussianSort::compareUsersByName)
                 .map(this::toChatContact)
                 .toList();
     }

@@ -13,6 +13,7 @@ import org.example.repository.TeacherSubjectRepository;
 import org.example.repository.UsersRepository;
 import org.example.service.TeacherSubjectService;
 import org.example.service.UniversityScopeService;
+import org.example.util.RussianSort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -43,10 +44,12 @@ public class TeacherSubjectServiceImpl implements TeacherSubjectService {
                     universityScopeService.assertUserInUniversity(tp.getUser().getId(), uni);
                     return teacherSubjectRepository.findByTeacherId(teacherId).stream()
                             .map(this::mapToResponse)
+                            .sorted(RussianSort.teacherSubjects())
                             .collect(Collectors.toList());
                 }
                 return teacherSubjectRepository.findByTeacherInUniversityId(uni).stream()
                         .map(this::mapToResponse)
+                        .sorted(RussianSort.teacherSubjects())
                         .collect(Collectors.toList());
             }
             if (t == UserType.SUPER_ADMIN) {
@@ -55,10 +58,12 @@ public class TeacherSubjectServiceImpl implements TeacherSubjectService {
                             .orElseThrow(() -> new ResourceNotFoundException("Teacher profile not found with id: " + teacherId));
                     return teacherSubjectRepository.findByTeacherId(teacherId).stream()
                             .map(this::mapToResponse)
+                            .sorted(RussianSort.teacherSubjects())
                             .collect(Collectors.toList());
                 }
                 return teacherSubjectRepository.findAll().stream()
                         .map(this::mapToResponse)
+                        .sorted(RussianSort.teacherSubjects())
                         .collect(Collectors.toList());
             }
         }
@@ -67,6 +72,7 @@ public class TeacherSubjectServiceImpl implements TeacherSubjectService {
                 : teacherSubjectRepository.findAll();
         return list.stream()
                 .map(this::mapToResponse)
+                .sorted(RussianSort.teacherSubjects())
                 .collect(Collectors.toList());
     }
 
@@ -158,6 +164,7 @@ public class TeacherSubjectServiceImpl implements TeacherSubjectService {
 
         return teacherSubjectRepository.findByTeacherId(teacherProfileId).stream()
                 .map(this::mapToResponse)
+                .sorted(RussianSort.teacherSubjects())
                 .toList();
     }
 

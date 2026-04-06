@@ -24,6 +24,7 @@ import java.util.List;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.nullable;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
@@ -74,7 +75,7 @@ class SubjectControllerTest {
         mockAdminAuth();
         SubjectResponse s1 = SubjectResponse.builder().id(1L).name("Математика").build();
         SubjectResponse s2 = SubjectResponse.builder().id(2L).name("Физика").build();
-        when(subjectService.getAll()).thenReturn(List.of(s1, s2));
+        when(subjectService.getAll(nullable(Long.class), eq("admin@uni.ru"))).thenReturn(List.of(s1, s2));
 
         mockMvc.perform(get("/api/v1/subjects")
                         .header("Authorization", "Bearer admin-token"))

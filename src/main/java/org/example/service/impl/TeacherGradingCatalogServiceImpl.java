@@ -8,6 +8,7 @@ import org.example.exception.ResourceNotFoundException;
 import org.example.model.*;
 import org.example.repository.*;
 import org.example.service.TeacherGradingCatalogService;
+import org.example.util.RussianSort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -56,6 +57,7 @@ public class TeacherGradingCatalogServiceImpl implements TeacherGradingCatalogSe
                         .name(i.getName())
                         .subtitle(i.getShortName())
                         .build())
+                .sorted(RussianSort.teacherGradingPicks())
                 .collect(Collectors.toList());
     }
 
@@ -71,6 +73,7 @@ public class TeacherGradingCatalogServiceImpl implements TeacherGradingCatalogSe
                         .name(d.getName())
                         .subtitle(d.getCode())
                         .build())
+                .sorted(RussianSort.teacherGradingPicks())
                 .collect(Collectors.toList());
     }
 
@@ -82,6 +85,7 @@ public class TeacherGradingCatalogServiceImpl implements TeacherGradingCatalogSe
         }
         return teacherSubjectRepository.findSubjectDirectionsForTeacherAndDirection(tp.getId(), directionId).stream()
                 .map(this::mapSid)
+                .sorted(RussianSort.subjectInDirections())
                 .collect(Collectors.toList());
     }
 
@@ -98,6 +102,7 @@ public class TeacherGradingCatalogServiceImpl implements TeacherGradingCatalogSe
                         .name(g.getName())
                         .subtitle(g.getCourse() != null ? ("Курс " + g.getCourse()) : null)
                         .build())
+                .sorted(RussianSort.teacherGradingPicks())
                 .collect(Collectors.toList());
     }
 
@@ -125,7 +130,7 @@ public class TeacherGradingCatalogServiceImpl implements TeacherGradingCatalogSe
                             .subtitle(group.getName())
                             .build();
                 })
-                .sorted((a, b) -> a.getName().compareToIgnoreCase(b.getName()))
+                .sorted(RussianSort.teacherGradingPicks())
                 .collect(Collectors.toList());
     }
 
@@ -169,7 +174,9 @@ public class TeacherGradingCatalogServiceImpl implements TeacherGradingCatalogSe
                 .map(g -> mapGrade(g, student))
                 .orElse(null);
 
-        List<SubjectPractice> practices = subjectPracticeRepository.findBySubjectDirectionId(subjectDirectionId);
+        List<SubjectPractice> practices = new ArrayList<>(
+                subjectPracticeRepository.findBySubjectDirectionId(subjectDirectionId));
+        RussianSort.sortSubjectPractices(practices);
         List<TeacherPracticeSlotResponse> slots = new ArrayList<>();
         for (SubjectPractice pr : practices) {
             Optional<PracticeGrade> pgOpt = practiceGradeRepository.findByStudentIdAndPracticeId(studentUserId, pr.getId());

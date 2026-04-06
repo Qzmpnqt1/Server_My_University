@@ -14,6 +14,7 @@ import org.example.service.AuditService;
 import org.example.service.NotificationService;
 import org.example.service.PracticeGradeService;
 import org.example.service.UniversityScopeService;
+import org.example.util.RussianSort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -60,14 +61,21 @@ public class PracticeGradeServiceImpl implements PracticeGradeService {
                 return List.of();
             }
 
-            return practiceGradeRepository.findByStudentIdAndPracticeIdIn(user.getId(), practiceIds).stream()
+            List<PracticeGradeResponse> pgList = practiceGradeRepository.findByStudentIdAndPracticeIdIn(user.getId(), practiceIds).stream()
                     .map(this::mapToResponse)
                     .collect(Collectors.toList());
+            pgList.sort(Comparator.comparing(PracticeGradeResponse::getPracticeNumber, Comparator.nullsLast(Integer::compareTo))
+                    .thenComparing(PracticeGradeResponse::getPracticeId, Comparator.nullsLast(Long::compareTo)));
+            return pgList;
         }
 
-        return practiceGradeRepository.findByStudentId(user.getId()).stream()
+        List<PracticeGradeResponse> allPg = practiceGradeRepository.findByStudentId(user.getId()).stream()
                 .map(this::mapToResponse)
                 .collect(Collectors.toList());
+        allPg.sort(Comparator.comparing(PracticeGradeResponse::getPracticeTitle, RussianSort::compareText)
+                .thenComparing(PracticeGradeResponse::getPracticeNumber, Comparator.nullsLast(Integer::compareTo))
+                .thenComparing(PracticeGradeResponse::getId, Comparator.nullsLast(Long::compareTo)));
+        return allPg;
     }
 
     @Override
@@ -167,9 +175,12 @@ public class PracticeGradeServiceImpl implements PracticeGradeService {
             throw new AccessDeniedException("Недостаточно прав");
         }
 
-        return practiceGradeRepository.findByPracticeId(practiceId).stream()
+        List<PracticeGradeResponse> out = practiceGradeRepository.findByPracticeId(practiceId).stream()
                 .map(this::mapToResponse)
                 .collect(Collectors.toList());
+        out.sort(Comparator.comparing(PracticeGradeResponse::getStudentName, RussianSort::compareText)
+                .thenComparing(PracticeGradeResponse::getStudentId, Comparator.nullsLast(Long::compareTo)));
+        return out;
     }
 
     @Override

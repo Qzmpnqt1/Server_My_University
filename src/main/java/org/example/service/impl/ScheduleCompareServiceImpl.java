@@ -14,6 +14,7 @@ import org.example.repository.*;
 import org.example.service.ScheduleCompareService;
 import org.example.service.UniversityScopeService;
 import org.example.service.ViewerUniversityResolver;
+import org.example.util.RussianSort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -251,7 +252,8 @@ public class ScheduleCompareServiceImpl implements ScheduleCompareService {
                         .name(i.getName())
                         .shortName(i.getShortName())
                         .build())
-                .sorted(Comparator.comparing(ScheduleCompareInstituteOptionResponse::getName, String.CASE_INSENSITIVE_ORDER))
+                .sorted(Comparator.comparing(ScheduleCompareInstituteOptionResponse::getName, RussianSort::compareText)
+                        .thenComparing(ScheduleCompareInstituteOptionResponse::getId, Comparator.nullsLast(Long::compareTo)))
                 .toList();
     }
 
@@ -266,7 +268,9 @@ public class ScheduleCompareServiceImpl implements ScheduleCompareService {
                         .name(d.getName())
                         .code(d.getCode())
                         .build())
-                .sorted(Comparator.comparing(ScheduleCompareDirectionOptionResponse::getName, String.CASE_INSENSITIVE_ORDER))
+                .sorted(Comparator.comparing(ScheduleCompareDirectionOptionResponse::getName, RussianSort::compareText)
+                        .thenComparing(ScheduleCompareDirectionOptionResponse::getCode, RussianSort::compareText)
+                        .thenComparing(ScheduleCompareDirectionOptionResponse::getId, Comparator.nullsLast(Long::compareTo)))
                 .toList();
     }
 
@@ -288,6 +292,9 @@ public class ScheduleCompareServiceImpl implements ScheduleCompareService {
                         .directionName(g.getDirection().getName())
                         .instituteName(g.getDirection().getInstitute().getName())
                         .build())
+                .sorted(Comparator.comparing(ScheduleCompareGroupOptionResponse::getName, RussianSort::compareText)
+                        .thenComparing(ScheduleCompareGroupOptionResponse::getDirectionName, RussianSort::compareText)
+                        .thenComparing(ScheduleCompareGroupOptionResponse::getId, Comparator.nullsLast(Long::compareTo)))
                 .toList();
     }
 
@@ -300,7 +307,7 @@ public class ScheduleCompareServiceImpl implements ScheduleCompareService {
         List<Users> teachers = usersRepository.findAllById(ids).stream()
                 .filter(u -> u.getUserType() == UserType.TEACHER)
                 .filter(u -> qq == null || matchesTeacherSearch(u, qq))
-                .sorted(Comparator.comparing(Users::getLastName, String.CASE_INSENSITIVE_ORDER))
+                .sorted(RussianSort::compareUsersByName)
                 .toList();
         return teachers.stream().map(u -> {
             String inst = null;
@@ -339,8 +346,7 @@ public class ScheduleCompareServiceImpl implements ScheduleCompareService {
         String qq = (q == null || q.isBlank()) ? null : q.trim().toLowerCase(Locale.ROOT);
         return classroomRepository.findByUniversityId(uni).stream()
                 .filter(c -> qq == null || classroomMatches(c, qq))
-                .sorted(Comparator.comparing(Classroom::getBuilding, String.CASE_INSENSITIVE_ORDER)
-                        .thenComparing(c -> Objects.toString(c.getRoomNumber(), ""), String.CASE_INSENSITIVE_ORDER))
+                .sorted(RussianSort.classroomEntityComparator())
                 .map(c -> {
                     String label = c.getBuilding() + ", ауд. " + c.getRoomNumber();
                     return ScheduleCompareClassroomOptionResponse.builder()

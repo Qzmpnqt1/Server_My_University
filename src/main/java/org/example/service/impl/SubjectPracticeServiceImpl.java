@@ -13,6 +13,7 @@ import org.example.repository.SubjectPracticeRepository;
 import org.example.repository.UsersRepository;
 import org.example.service.SubjectPracticeService;
 import org.example.service.UniversityScopeService;
+import org.example.util.RussianSort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -45,6 +46,7 @@ public class SubjectPracticeServiceImpl implements SubjectPracticeService {
         });
         return subjectPracticeRepository.findBySubjectDirectionId(subjectDirectionId).stream()
                 .map(this::mapToResponse)
+                .sorted(RussianSort.subjectPracticesByNumber())
                 .collect(Collectors.toList());
     }
 

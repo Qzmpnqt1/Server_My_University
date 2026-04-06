@@ -82,7 +82,8 @@ class SubjectInDirectionControllerTest {
                 .course(1)
                 .semester(1)
                 .build();
-        when(subjectInDirectionService.getAll(nullable(Long.class), eq("admin@uni.ru"))).thenReturn(List.of(r));
+        when(subjectInDirectionService.getAll(nullable(Long.class), nullable(Long.class), eq("admin@uni.ru")))
+                .thenReturn(List.of(r));
 
         mockMvc.perform(get("/api/v1/subjects-in-directions")
                         .header("Authorization", "Bearer admin-token"))

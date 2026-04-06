@@ -14,9 +14,11 @@ import org.example.repository.StudyDirectionRepository;
 import org.example.repository.UsersRepository;
 import org.example.service.AcademicGroupService;
 import org.example.service.UniversityScopeService;
+import org.example.util.RussianSort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.Comparator;
 import java.util.List;
 import java.util.Optional;
 import java.util.stream.Collectors;
@@ -49,15 +51,21 @@ public class AcademicGroupServiceImpl implements AcademicGroupService {
                     }
                     return academicGroupRepository.findByDirectionId(directionId).stream()
                             .map(this::mapToResponse)
+                            .sorted(RussianSort.byText(AcademicGroupResponse::getName)
+                                    .thenComparing(AcademicGroupResponse::getId, Comparator.nullsLast(Long::compareTo)))
                             .collect(Collectors.toList());
                 }
                 if (!scope.globalAllUniversities()) {
                     return academicGroupRepository.findByDirection_Institute_University_Id(scope.universityId()).stream()
                             .map(this::mapToResponse)
+                            .sorted(RussianSort.byText(AcademicGroupResponse::getName)
+                                    .thenComparing(AcademicGroupResponse::getId, Comparator.nullsLast(Long::compareTo)))
                             .collect(Collectors.toList());
                 }
                 return academicGroupRepository.findAll().stream()
                         .map(this::mapToResponse)
+                        .sorted(RussianSort.byText(AcademicGroupResponse::getName)
+                                .thenComparing(AcademicGroupResponse::getId, Comparator.nullsLast(Long::compareTo)))
                         .collect(Collectors.toList());
             }
         }
@@ -71,6 +79,8 @@ public class AcademicGroupServiceImpl implements AcademicGroupService {
         }
         return groups.stream()
                 .map(this::mapToResponse)
+                .sorted(RussianSort.byText(AcademicGroupResponse::getName)
+                        .thenComparing(AcademicGroupResponse::getId, Comparator.nullsLast(Long::compareTo)))
                 .collect(Collectors.toList());
     }
 
