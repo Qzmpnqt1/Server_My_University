@@ -10,7 +10,11 @@ import java.util.List;
 
 public interface ChatService {
 
-    List<ChatContactResponse> listChatContacts(String email);
+    /**
+     * @param universityId для SUPER_ADMIN: null — все активные пользователи; иначе — только вуз.
+     *                     для ADMIN игнорируется (всегда кампусный вуз).
+     */
+    List<ChatContactResponse> listChatContacts(String email, Long universityId);
 
     List<ConversationResponse> getMyConversations(String email);
 

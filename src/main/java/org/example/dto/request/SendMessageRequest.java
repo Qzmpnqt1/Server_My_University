@@ -18,4 +18,11 @@ public class SendMessageRequest {
 
     @NotBlank(message = "Текст сообщения обязателен")
     private String text;
+
+    /**
+     * Для {@code SUPER_ADMIN}: null в глобальном режиме — можно писать любому активному пользователю;
+     * non-null — получатель должен относиться к этому вузу.
+     * Для остальных ролей игнорируется.
+     */
+    private Long scopeUniversityId;
 }

@@ -7,6 +7,7 @@ import org.example.exception.ResourceNotFoundException;
 import org.example.model.AcademicGroup;
 import org.example.model.StudyDirection;
 import org.example.model.UserType;
+import org.example.service.UniversityScopeService.AdminQueryScope;
 import org.example.model.Users;
 import org.example.repository.AcademicGroupRepository;
 import org.example.repository.StudyDirectionRepository;
@@ -31,29 +32,27 @@ public class AcademicGroupServiceImpl implements AcademicGroupService {
     private final UniversityScopeService universityScopeService;
 
     @Override
-    public List<AcademicGroupResponse> getAll(Long directionId, String viewerEmail) {
+    public List<AcademicGroupResponse> getAll(Long directionId, Long universityId, String viewerEmail) {
         Optional<Users> viewer = resolveViewer(viewerEmail);
         if (viewer.isPresent()) {
             UserType t = viewer.get().getUserType();
-            if (t == UserType.ADMIN) {
-                Long uni = universityScopeService.requireCampusUniversityId(viewerEmail);
+            if (t == UserType.ADMIN || t == UserType.SUPER_ADMIN) {
+                AdminQueryScope scope = universityScopeService.resolveAdminQueryScope(viewerEmail, universityId);
                 if (directionId != null) {
-                    universityScopeService.assertStudyDirectionInUniversity(directionId, uni);
+                    StudyDirection d = studyDirectionRepository.findById(directionId)
+                            .orElseThrow(() -> new ResourceNotFoundException("Study direction not found with id: " + directionId));
+                    long dirUni = d.getInstitute().getUniversity().getId();
+                    if (scope.globalAllUniversities()) {
+                        universityScopeService.enforceAccessToEntityUniversity(viewerEmail, dirUni);
+                    } else {
+                        universityScopeService.assertStudyDirectionInUniversity(directionId, scope.universityId());
+                    }
                     return academicGroupRepository.findByDirectionId(directionId).stream()
                             .map(this::mapToResponse)
                             .collect(Collectors.toList());
                 }
-                return academicGroupRepository.findByDirection_Institute_University_Id(uni).stream()
-                        .map(this::mapToResponse)
-                        .collect(Collectors.toList());
-            }
-            if (t == UserType.SUPER_ADMIN) {
-                if (directionId != null) {
-                    StudyDirection d = studyDirectionRepository.findById(directionId)
-                            .orElseThrow(() -> new ResourceNotFoundException("Study direction not found with id: " + directionId));
-                    universityScopeService.enforceAccessToEntityUniversity(viewerEmail,
-                            d.getInstitute().getUniversity().getId());
-                    return academicGroupRepository.findByDirectionId(directionId).stream()
+                if (!scope.globalAllUniversities()) {
+                    return academicGroupRepository.findByDirection_Institute_University_Id(scope.universityId()).stream()
                             .map(this::mapToResponse)
                             .collect(Collectors.toList());
                 }
@@ -62,9 +61,14 @@ public class AcademicGroupServiceImpl implements AcademicGroupService {
                         .collect(Collectors.toList());
             }
         }
-        List<AcademicGroup> groups = (directionId != null)
-                ? academicGroupRepository.findByDirectionId(directionId)
-                : academicGroupRepository.findAll();
+        List<AcademicGroup> groups;
+        if (directionId != null) {
+            groups = academicGroupRepository.findByDirectionId(directionId);
+        } else if (universityId != null) {
+            groups = academicGroupRepository.findByDirection_Institute_University_Id(universityId);
+        } else {
+            groups = academicGroupRepository.findAll();
+        }
         return groups.stream()
                 .map(this::mapToResponse)
                 .collect(Collectors.toList());

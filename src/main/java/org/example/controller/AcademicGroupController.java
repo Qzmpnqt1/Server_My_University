@@ -29,8 +29,9 @@ public class AcademicGroupController {
     @GetMapping
     public ResponseEntity<List<AcademicGroupResponse>> getAll(
             @RequestParam(required = false) Long directionId,
+            @RequestParam(required = false) Long universityId,
             Principal principal) {
-        return ResponseEntity.ok(academicGroupService.getAll(directionId, emailOrNull(principal)));
+        return ResponseEntity.ok(academicGroupService.getAll(directionId, universityId, emailOrNull(principal)));
     }
 
     @GetMapping("/{id}")

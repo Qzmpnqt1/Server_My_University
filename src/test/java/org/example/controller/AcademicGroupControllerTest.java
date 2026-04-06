@@ -75,7 +75,8 @@ class AcademicGroupControllerTest {
         AcademicGroupResponse g = AcademicGroupResponse.builder()
                 .id(1L).name("ИТ-101").course(1).yearOfAdmission(2024)
                 .directionId(2L).directionName("ИВТ").build();
-        when(academicGroupService.getAll(nullable(Long.class), nullable(String.class))).thenReturn(List.of(g));
+        when(academicGroupService.getAll(nullable(Long.class), nullable(Long.class), nullable(String.class)))
+                .thenReturn(List.of(g));
 
         mockMvc.perform(get("/api/v1/groups"))
                 .andExpect(status().isOk())
@@ -89,7 +90,8 @@ class AcademicGroupControllerTest {
         AcademicGroupResponse g = AcademicGroupResponse.builder()
                 .id(3L).name("ИТ-201").course(2).yearOfAdmission(2023)
                 .directionId(5L).directionName("ПИ").build();
-        when(academicGroupService.getAll(eq(5L), nullable(String.class))).thenReturn(List.of(g));
+        when(academicGroupService.getAll(eq(5L), nullable(Long.class), nullable(String.class)))
+                .thenReturn(List.of(g));
 
         mockMvc.perform(get("/api/v1/groups").param("directionId", "5"))
                 .andExpect(status().isOk())

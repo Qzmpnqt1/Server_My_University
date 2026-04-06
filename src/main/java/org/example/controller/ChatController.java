@@ -31,8 +31,10 @@ public class ChatController {
     /** Отдельный путь (не под /users), чтобы не пересекаться с /users/{id}. */
     @GetMapping("/contacts")
     @PreAuthorize("isAuthenticated()")
-    public ResponseEntity<List<ChatContactResponse>> listChatContacts(Principal principal) {
-        return ResponseEntity.ok(chatService.listChatContacts(principal.getName()));
+    public ResponseEntity<List<ChatContactResponse>> listChatContacts(
+            @RequestParam(required = false) Long universityId,
+            Principal principal) {
+        return ResponseEntity.ok(chatService.listChatContacts(principal.getName(), universityId));
     }
 
     @GetMapping("/{conversationId}/messages")

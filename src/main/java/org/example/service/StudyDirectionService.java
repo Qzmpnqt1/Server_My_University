@@ -7,7 +7,11 @@ import java.util.List;
 
 public interface StudyDirectionService {
 
-    List<StudyDirectionResponse> getAll(Long instituteId, String viewerEmail);
+    /**
+     * @param universityId для SUPER_ADMIN без instituteId: фильтр направлений по вузу; null — все направления.
+     *                     для ADMIN игнорируется (всегда кампусный вуз), кроме проверки совпадения если передан.
+     */
+    List<StudyDirectionResponse> getAll(Long instituteId, Long universityId, String viewerEmail);
 
     StudyDirectionResponse getById(Long id, String viewerEmail);
 

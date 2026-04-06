@@ -75,7 +75,8 @@ class StudyDirectionControllerTest {
         StudyDirectionResponse r1 = StudyDirectionResponse.builder()
                 .id(1L).name("Прикладная информатика").code("09.03.03")
                 .instituteId(10L).instituteName("ИИ").build();
-        when(studyDirectionService.getAll(nullable(Long.class), nullable(String.class))).thenReturn(List.of(r1));
+        when(studyDirectionService.getAll(nullable(Long.class), nullable(Long.class), nullable(String.class)))
+                .thenReturn(List.of(r1));
 
         mockMvc.perform(get("/api/v1/directions"))
                 .andExpect(status().isOk())

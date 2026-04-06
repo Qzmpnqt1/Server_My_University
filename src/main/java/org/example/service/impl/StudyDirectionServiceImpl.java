@@ -13,6 +13,7 @@ import org.example.repository.StudyDirectionRepository;
 import org.example.repository.UsersRepository;
 import org.example.service.StudyDirectionService;
 import org.example.service.UniversityScopeService;
+import org.example.service.UniversityScopeService.AdminQueryScope;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -31,28 +32,26 @@ public class StudyDirectionServiceImpl implements StudyDirectionService {
     private final UniversityScopeService universityScopeService;
 
     @Override
-    public List<StudyDirectionResponse> getAll(Long instituteId, String viewerEmail) {
+    public List<StudyDirectionResponse> getAll(Long instituteId, Long universityId, String viewerEmail) {
         Optional<Users> viewer = resolveViewer(viewerEmail);
         if (viewer.isPresent()) {
             UserType t = viewer.get().getUserType();
-            if (t == UserType.ADMIN) {
-                Long uni = universityScopeService.requireCampusUniversityId(viewerEmail);
+            if (t == UserType.ADMIN || t == UserType.SUPER_ADMIN) {
+                AdminQueryScope scope = universityScopeService.resolveAdminQueryScope(viewerEmail, universityId);
                 if (instituteId != null) {
-                    universityScopeService.assertInstituteInUniversity(instituteId, uni);
+                    Institute i = instituteRepository.findById(instituteId)
+                            .orElseThrow(() -> new ResourceNotFoundException("Institute not found with id: " + instituteId));
+                    if (scope.globalAllUniversities()) {
+                        universityScopeService.enforceAccessToEntityUniversity(viewerEmail, i.getUniversity().getId());
+                    } else {
+                        universityScopeService.assertInstituteInUniversity(instituteId, scope.universityId());
+                    }
                     return studyDirectionRepository.findByInstituteId(instituteId).stream()
                             .map(this::mapToResponse)
                             .collect(Collectors.toList());
                 }
-                return studyDirectionRepository.findByInstitute_University_Id(uni).stream()
-                        .map(this::mapToResponse)
-                        .collect(Collectors.toList());
-            }
-            if (t == UserType.SUPER_ADMIN) {
-                if (instituteId != null) {
-                    Institute i = instituteRepository.findById(instituteId)
-                            .orElseThrow(() -> new ResourceNotFoundException("Institute not found with id: " + instituteId));
-                    universityScopeService.enforceAccessToEntityUniversity(viewerEmail, i.getUniversity().getId());
-                    return studyDirectionRepository.findByInstituteId(instituteId).stream()
+                if (!scope.globalAllUniversities()) {
+                    return studyDirectionRepository.findByInstitute_University_Id(scope.universityId()).stream()
                             .map(this::mapToResponse)
                             .collect(Collectors.toList());
                 }
@@ -61,9 +60,14 @@ public class StudyDirectionServiceImpl implements StudyDirectionService {
                         .collect(Collectors.toList());
             }
         }
-        List<StudyDirection> directions = (instituteId != null)
-                ? studyDirectionRepository.findByInstituteId(instituteId)
-                : studyDirectionRepository.findAll();
+        List<StudyDirection> directions;
+        if (instituteId != null) {
+            directions = studyDirectionRepository.findByInstituteId(instituteId);
+        } else if (universityId != null) {
+            directions = studyDirectionRepository.findByInstitute_University_Id(universityId);
+        } else {
+            directions = studyDirectionRepository.findAll();
+        }
         return directions.stream()
                 .map(this::mapToResponse)
                 .collect(Collectors.toList());

@@ -7,6 +7,21 @@ import java.util.Set;
  */
 public interface UniversityScopeService {
 
+    /**
+     * Эффективная область данных для админских списков и фильтрации.
+     * <ul>
+     *     <li>{@code ADMIN}: всегда один вуз (кампусный); переданный {@code requestUniversityId} должен совпадать или быть null.</li>
+     *     <li>{@code SUPER_ADMIN}: {@code requestUniversityId == null} → глобальный режим (все вузы);
+     *     иначе — только указанный вуз.</li>
+     * </ul>
+     */
+    record AdminQueryScope(boolean globalAllUniversities, Long universityId) {}
+
+    /**
+     * @param requestUniversityId для SUPER_ADMIN: null = глобальный режим; для ADMIN: игнорируется при null (берётся кампус).
+     */
+    AdminQueryScope resolveAdminQueryScope(String viewerEmail, Long requestUniversityId);
+
     /** Все user id студентов, преподавателей и админов указанного вуза (для аудита и фильтрации). */
     Set<Long> allUserIdsInUniversity(Long universityId);
 

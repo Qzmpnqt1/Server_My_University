@@ -7,7 +7,7 @@ import java.util.List;
 
 public interface AcademicGroupService {
 
-    List<AcademicGroupResponse> getAll(Long directionId, String viewerEmail);
+    List<AcademicGroupResponse> getAll(Long directionId, Long universityId, String viewerEmail);
 
     AcademicGroupResponse getById(Long id, String viewerEmail);
 

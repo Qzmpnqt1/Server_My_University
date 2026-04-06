@@ -42,6 +42,26 @@ public class UniversityScopeServiceImpl implements UniversityScopeService {
     }
 
     @Override
+    public AdminQueryScope resolveAdminQueryScope(String viewerEmail, Long requestUniversityId) {
+        Users u = usersRepository.findByEmail(viewerEmail)
+                .orElseThrow(() -> new ResourceNotFoundException("Пользователь не найден"));
+        if (u.getUserType() == UserType.ADMIN) {
+            Long campus = requireCampusUniversityId(viewerEmail);
+            if (requestUniversityId != null && !requestUniversityId.equals(campus)) {
+                throw new AccessDeniedException("Нет доступа к данным другого вуза");
+            }
+            return new AdminQueryScope(false, campus);
+        }
+        if (u.getUserType() == UserType.SUPER_ADMIN) {
+            if (requestUniversityId == null) {
+                return new AdminQueryScope(true, null);
+            }
+            return new AdminQueryScope(false, requestUniversityId);
+        }
+        throw new AccessDeniedException("Требуются права администратора");
+    }
+
+    @Override
     public Set<Long> allUserIdsInUniversity(Long universityId) {
         Set<Long> ids = new HashSet<>();
         ids.addAll(studentProfileRepository.findUserIdsByUniversityId(universityId));

@@ -9,7 +9,8 @@ import org.example.dto.response.MessageResponse;
 import org.example.exception.AccessDeniedException;
 import org.example.exception.BadRequestException;
 import org.example.exception.ResourceNotFoundException;
-import org.example.model.*;
+import org.example.model.UserType;
+import org.example.model.Users;
 import org.example.repository.StudentProfileRepository;
 import org.example.repository.UsersRepository;
 import org.example.repository.cassandra.CassandraConversationRepository;
@@ -60,23 +61,32 @@ public class ChatServiceImpl implements ChatService {
     }
 
     @Override
-    public List<ChatContactResponse> listChatContacts(String email) {
+    public List<ChatContactResponse> listChatContacts(String email, Long requestUniversityId) {
         Users self = findUserByEmail(email);
-        Long scopeUni = requireUniversityIdForMessaging(email, self);
+        if (self.getUserType() == UserType.ADMIN || self.getUserType() == UserType.SUPER_ADMIN) {
+            UniversityScopeService.AdminQueryScope scope =
+                    universityScopeService.resolveAdminQueryScope(email, requestUniversityId);
+            var stream = usersRepository.findAll().stream()
+                    .filter(u -> !u.getId().equals(self.getId()))
+                    .filter(u -> Boolean.TRUE.equals(u.getIsActive()));
+            if (!scope.globalAllUniversities()) {
+                Long uni = scope.universityId();
+                stream = stream.filter(u -> universityScopeService.userBelongsToUniversity(u.getId(), uni));
+            }
+            return stream
+                    .sorted(Comparator.comparing(Users::getLastName, Comparator.nullsLast(String::compareToIgnoreCase))
+                            .thenComparing(Users::getFirstName, Comparator.nullsLast(String::compareToIgnoreCase)))
+                    .map(this::toChatContact)
+                    .toList();
+        }
+        Long scopeUni = requireUniversityIdForCampusUser(self);
         return usersRepository.findAll().stream()
                 .filter(u -> !u.getId().equals(self.getId()))
                 .filter(u -> Boolean.TRUE.equals(u.getIsActive()))
                 .filter(u -> universityScopeService.userBelongsToUniversity(u.getId(), scopeUni))
                 .sorted(Comparator.comparing(Users::getLastName, Comparator.nullsLast(String::compareToIgnoreCase))
                         .thenComparing(Users::getFirstName, Comparator.nullsLast(String::compareToIgnoreCase)))
-                .map(u -> ChatContactResponse.builder()
-                        .id(u.getId())
-                        .email(u.getEmail())
-                        .firstName(u.getFirstName())
-                        .lastName(u.getLastName())
-                        .middleName(u.getMiddleName())
-                        .userType(u.getUserType() != null ? u.getUserType().name() : null)
-                        .build())
+                .map(this::toChatContact)
                 .toList();
     }
 
@@ -118,9 +128,20 @@ public class ChatServiceImpl implements ChatService {
             throw new BadRequestException("Нельзя отправить сообщение самому себе");
         }
 
-        Long senderUni = requireUniversityIdForMessaging(email, sender);
-        if (!universityScopeService.userBelongsToUniversity(recipient.getId(), senderUni)) {
-            throw new BadRequestException("Можно отправлять сообщения только пользователям своего вуза");
+        if (sender.getUserType() == UserType.ADMIN || sender.getUserType() == UserType.SUPER_ADMIN) {
+            UniversityScopeService.AdminQueryScope scope = universityScopeService.resolveAdminQueryScope(
+                    email, request.getScopeUniversityId());
+            if (!scope.globalAllUniversities()) {
+                Long uni = scope.universityId();
+                if (!universityScopeService.userBelongsToUniversity(recipient.getId(), uni)) {
+                    throw new BadRequestException("Получатель не относится к выбранной области видимости вуза");
+                }
+            }
+        } else {
+            Long senderUni = requireUniversityIdForCampusUser(sender);
+            if (!universityScopeService.userBelongsToUniversity(recipient.getId(), senderUni)) {
+                throw new BadRequestException("Можно отправлять сообщения только пользователям своего вуза");
+            }
         }
 
         UUID conversationId = generateConversationId(sender.getId(), recipient.getId());
@@ -166,20 +187,26 @@ public class ChatServiceImpl implements ChatService {
                 .orElseThrow(() -> new ResourceNotFoundException("Пользователь не найден"));
     }
 
-    /**
-     * Вуз текущего пользователя для списка контактов и отправки сообщений (студент / преподаватель / админ).
-     */
-    private Long requireUniversityIdForMessaging(String email, Users self) {
+    private ChatContactResponse toChatContact(Users u) {
+        return ChatContactResponse.builder()
+                .id(u.getId())
+                .email(u.getEmail())
+                .firstName(u.getFirstName())
+                .lastName(u.getLastName())
+                .middleName(u.getMiddleName())
+                .userType(u.getUserType() != null ? u.getUserType().name() : null)
+                .build();
+    }
+
+    /** Вуз для студента / преподавателя (контакты и сообщения в рамках одного вуза). */
+    private Long requireUniversityIdForCampusUser(Users self) {
         return switch (self.getUserType()) {
-            case SUPER_ADMIN -> throw new BadRequestException(
-                    "Для суперадминистратора контакты чата пока недоступны без выбора вуза в клиенте");
-            case ADMIN -> universityScopeService.requireCampusUniversityId(email);
             case STUDENT -> studentProfileRepository.findFetchedByUserId(self.getId())
                     .map(sp -> sp.getInstitute().getUniversity().getId())
                     .orElseThrow(() -> new BadRequestException("Профиль студента не найден или не привязан к вузу"));
             case TEACHER -> {
                 try {
-                    yield viewerUniversityResolver.requireUniversityIdForEmail(email);
+                    yield viewerUniversityResolver.requireUniversityIdForEmail(self.getEmail());
                 } catch (AccessDeniedException ex) {
                     throw new BadRequestException(
                             "Не удалось определить вуз преподавателя: укажите вуз в профиле или дождитесь назначения дисциплин администратором");
