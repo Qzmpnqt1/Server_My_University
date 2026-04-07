@@ -57,7 +57,9 @@ class GradeServiceTest {
     @BeforeEach
     void setUp() {
         subject = Subject.builder().id(1L).name("Математика").build();
-        studyDirection = StudyDirection.builder().id(1L).name("Направление").build();
+        University university = University.builder().id(1L).name("Тестовый ВУЗ").build();
+        Institute institute = Institute.builder().id(1L).name("Институт").university(university).build();
+        studyDirection = StudyDirection.builder().id(1L).name("Направление").institute(institute).build();
         subjectInDirection = SubjectInDirection.builder()
                 .id(1L).subject(subject).direction(studyDirection).semester(1).course(1).build();
 
@@ -83,6 +85,7 @@ class GradeServiceTest {
         lenient().doNothing().when(notificationService).notifyGradeChanged(anyLong(), anyString(), anyBoolean());
         lenient().when(universityScopeService.requireCampusUniversityId("admin@test.ru")).thenReturn(1L);
         lenient().doNothing().when(universityScopeService).requireAdminOrSuperAdmin("admin@test.ru");
+        lenient().when(universityScopeService.enforceAccessToEntityUniversity(anyString(), eq(1L))).thenReturn(1L);
         lenient().doNothing().when(universityScopeService).assertUserInUniversity(anyLong(), eq(1L));
         lenient().doNothing().when(universityScopeService).assertSubjectDirectionInUniversity(anyLong(), eq(1L));
     }

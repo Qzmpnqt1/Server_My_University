@@ -320,13 +320,11 @@ class StatisticsServiceTest {
     @DisplayName("Статистика расписания преподавателя: weekNumber ограничивает выборку")
     void teacherScheduleUsesWeekFilter() {
         Users teacher = Users.builder().id(1L).email("t@sched.ru").userType(UserType.TEACHER).build();
-        TeacherProfile tp = TeacherProfile.builder().id(20L).user(teacher).university(university).build();
         Schedule sc1 = Schedule.builder().id(1L).dayOfWeek(1).weekNumber(1)
                 .startTime(LocalTime.of(9, 0)).endTime(LocalTime.of(10, 0)).build();
 
         when(usersRepository.findByEmail("viewer@test.ru")).thenReturn(Optional.of(teacher));
         when(usersRepository.findById(1L)).thenReturn(Optional.of(teacher));
-        when(teacherProfileRepository.findByUserId(1L)).thenReturn(Optional.of(tp));
         when(scheduleRepository.findByTeacherIdAndWeekNumber(1L, 1)).thenReturn(List.of(sc1));
 
         ScheduleStatisticsResponse r = statisticsService.getTeacherScheduleStatistics(1L, "viewer@test.ru", 1);

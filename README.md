@@ -188,3 +188,8 @@ The `app` service in Docker Compose accepts the following overrides:
 | `SPRING_CASSANDRA_PORT` | `9042` | Cassandra CQL port |
 | `SPRING_CASSANDRA_LOCAL_DATACENTER` | `datacenter1` | Cassandra datacenter name |
 | `SPRING_CASSANDRA_KEYSPACE_NAME` | `my_university_chat` | Cassandra keyspace |
+| `JWT_SECRET` | *(dev default in `application.properties`)* | Секрет подписи JWT; для staging/production задайте явно (не коммитьте) |
+
+## CI/CD
+
+Сборка в GitHub Actions, публикация образа в GHCR и опциональный deploy описаны в **[docs/CI_CD.md](docs/CI_CD.md)**.
