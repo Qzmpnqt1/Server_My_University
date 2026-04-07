@@ -1,6 +1,7 @@
 package org.example.service;
 
 import org.example.dto.response.*;
+import org.example.exception.BadRequestException;
 import org.example.exception.ResourceNotFoundException;
 import org.example.model.*;
 import org.example.repository.*;
@@ -82,6 +83,9 @@ class StatisticsServiceTest {
         lenient().doNothing().when(universityScopeService).assertUniversityMatches(anyLong(), anyLong());
         lenient().doNothing().when(universityScopeService).assertUserInUniversity(anyLong(), anyLong());
         lenient().doNothing().when(universityScopeService).assertClassroomInUniversity(anyLong(), anyLong());
+
+        lenient().when(academicGroupRepository.findByDirectionId(anyLong())).thenReturn(List.of(group));
+        lenient().when(studentProfileRepository.findByGroupId(eq(1L))).thenReturn(List.of());
     }
 
     // ── Subject statistics ───────────────────────────────────────
@@ -89,11 +93,15 @@ class StatisticsServiceTest {
     @Test
     @DisplayName("Average calculated from numeric grades, nulls excluded")
     void subjectAverage() {
+        StudentProfile sp1 = StudentProfile.builder().id(1L).user(s1).group(group).build();
+        StudentProfile sp2 = StudentProfile.builder().id(2L).user(s2).group(group).build();
+        StudentProfile sp3 = StudentProfile.builder().id(3L).user(s3).group(group).build();
+        when(studentProfileRepository.findByGroupId(1L)).thenReturn(List.of(sp1, sp2, sp3));
         when(subjectInDirectionRepository.findById(1L)).thenReturn(Optional.of(sid));
         when(gradeRepository.findBySubjectDirectionId(1L)).thenReturn(List.of(
                 grade(s1, 4), grade(s2, null, true), grade(s3, 2)));
 
-        SubjectStatisticsResponse r = statisticsService.getSubjectStatistics(1L, "viewer@test.ru");
+        SubjectStatisticsResponse r = statisticsService.getSubjectStatistics(1L, "viewer@test.ru", null);
 
         assertEquals(3.0, r.getAverageGrade(), 0.01);
         assertEquals(3, r.getTotalStudents());
@@ -104,47 +112,61 @@ class StatisticsServiceTest {
     @Test
     @DisplayName("Median with even number of grades: (3+4)/2 = 3.5")
     void subjectMedianEven() {
+        StudentProfile sp1 = StudentProfile.builder().id(1L).user(s1).group(group).build();
+        StudentProfile sp2 = StudentProfile.builder().id(2L).user(s2).group(group).build();
+        StudentProfile sp3 = StudentProfile.builder().id(3L).user(s3).group(group).build();
+        StudentProfile sp4 = StudentProfile.builder().id(4L).user(s4).group(group).build();
+        when(studentProfileRepository.findByGroupId(1L)).thenReturn(List.of(sp1, sp2, sp3, sp4));
         when(subjectInDirectionRepository.findById(1L)).thenReturn(Optional.of(sid));
         when(gradeRepository.findBySubjectDirectionId(1L)).thenReturn(List.of(
                 grade(s1, 2), grade(s2, 5), grade(s3, 3), grade(s4, 4)));
 
-        SubjectStatisticsResponse r = statisticsService.getSubjectStatistics(1L, "viewer@test.ru");
+        SubjectStatisticsResponse r = statisticsService.getSubjectStatistics(1L, "viewer@test.ru", null);
         assertEquals(3.5, r.getMedianGrade(), 0.01);
     }
 
     @Test
     @DisplayName("Median with odd number of grades: sorted [2,3,5] → 3")
     void subjectMedianOdd() {
+        StudentProfile sp1 = StudentProfile.builder().id(1L).user(s1).group(group).build();
+        StudentProfile sp2 = StudentProfile.builder().id(2L).user(s2).group(group).build();
+        StudentProfile sp3 = StudentProfile.builder().id(3L).user(s3).group(group).build();
+        when(studentProfileRepository.findByGroupId(1L)).thenReturn(List.of(sp1, sp2, sp3));
         when(subjectInDirectionRepository.findById(1L)).thenReturn(Optional.of(sid));
         when(gradeRepository.findBySubjectDirectionId(1L)).thenReturn(List.of(
                 grade(s1, 5), grade(s2, 2), grade(s3, 3)));
 
-        SubjectStatisticsResponse r = statisticsService.getSubjectStatistics(1L, "viewer@test.ru");
+        SubjectStatisticsResponse r = statisticsService.getSubjectStatistics(1L, "viewer@test.ru", null);
         assertEquals(3.0, r.getMedianGrade(), 0.01);
     }
 
     @Test
-    @DisplayName("Credit rate: 2/3 = 66.67%")
+    @DisplayName("Credit rate: passed / total_required_students (2/3)")
     void subjectCreditRate() {
         SubjectInDirection sidCredit = SubjectInDirection.builder()
                 .id(1L).subject(subject).semester(1).course(1).direction(direction)
                 .finalAssessmentType(FinalAssessmentType.CREDIT)
                 .build();
+        StudentProfile sp1 = StudentProfile.builder().id(1L).user(s1).group(group).build();
+        StudentProfile sp2 = StudentProfile.builder().id(2L).user(s2).group(group).build();
+        StudentProfile sp3 = StudentProfile.builder().id(3L).user(s3).group(group).build();
+        when(studentProfileRepository.findByGroupId(1L)).thenReturn(List.of(sp1, sp2, sp3));
         when(subjectInDirectionRepository.findById(1L)).thenReturn(Optional.of(sidCredit));
         when(gradeRepository.findBySubjectDirectionId(1L)).thenReturn(List.of(
                 grade(s1, null, true), grade(s2, null, false), grade(s3, null, true)));
 
-        SubjectStatisticsResponse r = statisticsService.getSubjectStatistics(1L, "viewer@test.ru");
+        SubjectStatisticsResponse r = statisticsService.getSubjectStatistics(1L, "viewer@test.ru", null);
         assertEquals(66.67, r.getCreditRate(), 0.01);
     }
 
     @Test
     @DisplayName("Empty data returns zeros")
     void subjectEmpty() {
+        when(academicGroupRepository.findByDirectionId(1L)).thenReturn(Collections.emptyList());
         when(subjectInDirectionRepository.findById(1L)).thenReturn(Optional.of(sid));
         when(gradeRepository.findBySubjectDirectionId(1L)).thenReturn(List.of());
 
-        SubjectStatisticsResponse r = statisticsService.getSubjectStatistics(1L, "viewer@test.ru");
+        SubjectStatisticsResponse r = statisticsService.getSubjectStatistics(1L, "viewer@test.ru", null);
         assertEquals(0.0, r.getAverageGrade());
         assertEquals(0.0, r.getMedianGrade());
         assertEquals(0.0, r.getCreditRate());
@@ -154,11 +176,15 @@ class StatisticsServiceTest {
     @Test
     @DisplayName("Grade distribution counts correctly")
     void subjectDistribution() {
+        StudentProfile sp1 = StudentProfile.builder().id(1L).user(s1).group(group).build();
+        StudentProfile sp2 = StudentProfile.builder().id(2L).user(s2).group(group).build();
+        StudentProfile sp3 = StudentProfile.builder().id(3L).user(s3).group(group).build();
+        when(studentProfileRepository.findByGroupId(1L)).thenReturn(List.of(sp1, sp2, sp3));
         when(subjectInDirectionRepository.findById(1L)).thenReturn(Optional.of(sid));
         when(gradeRepository.findBySubjectDirectionId(1L)).thenReturn(List.of(
                 grade(s1, 5), grade(s2, 5), grade(s3, 3)));
 
-        SubjectStatisticsResponse r = statisticsService.getSubjectStatistics(1L, "viewer@test.ru");
+        SubjectStatisticsResponse r = statisticsService.getSubjectStatistics(1L, "viewer@test.ru", null);
         assertEquals(2L, r.getGradeDistribution().get(5));
         assertEquals(1L, r.getGradeDistribution().get(3));
     }
@@ -167,13 +193,14 @@ class StatisticsServiceTest {
     @DisplayName("Subject not found throws ResourceNotFoundException")
     void subjectNotFound() {
         when(subjectInDirectionRepository.findById(99L)).thenReturn(Optional.empty());
-        assertThrows(ResourceNotFoundException.class, () -> statisticsService.getSubjectStatistics(99L, "viewer@test.ru"));
+        assertThrows(ResourceNotFoundException.class,
+                () -> statisticsService.getSubjectStatistics(99L, "viewer@test.ru", null));
     }
 
     // ── Practice statistics ──────────────────────────────────────
 
     @Test
-    @DisplayName("Practice statistics: raw average + normalized to 5 при max_grade")
+    @DisplayName("Practice statistics: raw average; avg_norm — среднее процентов, не шкала 0–5")
     void practiceStats() {
         SubjectPractice p = SubjectPractice.builder()
                 .id(1L).subjectDirection(sid).practiceNumber(1)
@@ -182,21 +209,26 @@ class StatisticsServiceTest {
         PracticeGrade pg1 = PracticeGrade.builder().id(1L).student(s1).practice(p).grade(4).build();
         PracticeGrade pg2 = PracticeGrade.builder().id(2L).student(s2).practice(p).grade(5).build();
 
+        StudentProfile sp1 = StudentProfile.builder().id(1L).user(s1).group(group).build();
+        StudentProfile sp2 = StudentProfile.builder().id(2L).user(s2).group(group).build();
+        when(studentProfileRepository.findByGroupId(1L)).thenReturn(List.of(sp1, sp2));
         when(subjectInDirectionRepository.findById(1L)).thenReturn(Optional.of(sid));
         when(subjectPracticeRepository.findBySubjectDirectionId(1L)).thenReturn(List.of(p));
         when(practiceGradeRepository.findByPracticeId(1L)).thenReturn(List.of(pg1, pg2));
 
-        PracticeStatisticsResponse r = statisticsService.getPracticeStatistics(1L, "viewer@test.ru");
+        PracticeStatisticsResponse r = statisticsService.getPracticeStatistics(1L, "viewer@test.ru", null);
 
         assertEquals(1, r.getTotalPractices());
         assertEquals(100.0, r.getOverallProgress());
-        // Среднее по практикам в шкале 0–5: (4.5/10)*5 = 2.25
-        assertEquals(2.25, r.getTotalScoreAverage(), 0.01);
+        assertEquals(4.5, r.getTotalScoreAverage(), 0.01);
+        assertEquals(45.0, r.getAverageNormalizedPercentAcrossNumericPractices(), 0.01);
 
         PracticeStatisticsResponse.PracticeDetail d = r.getPractices().get(0);
         assertEquals(100.0, d.getCompletionRate());
         assertEquals(4.5, d.getAverageGrade(), 0.01);
         assertEquals(2.25, d.getNormalizedAverage(), 0.01);
+        assertEquals(45.0, d.getAverageNormalizedPercent(), 0.01);
+        assertEquals(2, d.getTotalRequiredStudents());
         assertNull(d.getCreditRate());
     }
 
@@ -212,11 +244,14 @@ class StatisticsServiceTest {
         PracticeGrade pg2 = PracticeGrade.builder().id(2L).student(s2).practice(p)
                 .grade(null).creditStatus(false).build();
 
+        StudentProfile sp1 = StudentProfile.builder().id(1L).user(s1).group(group).build();
+        StudentProfile sp2 = StudentProfile.builder().id(2L).user(s2).group(group).build();
+        when(studentProfileRepository.findByGroupId(1L)).thenReturn(List.of(sp1, sp2));
         when(subjectInDirectionRepository.findById(1L)).thenReturn(Optional.of(sid));
         when(subjectPracticeRepository.findBySubjectDirectionId(1L)).thenReturn(List.of(p));
         when(practiceGradeRepository.findByPracticeId(2L)).thenReturn(List.of(pg1, pg2));
 
-        PracticeStatisticsResponse r = statisticsService.getPracticeStatistics(1L, "viewer@test.ru");
+        PracticeStatisticsResponse r = statisticsService.getPracticeStatistics(1L, "viewer@test.ru", null);
 
         PracticeStatisticsResponse.PracticeDetail d = r.getPractices().get(0);
         assertNotNull(d.getCreditRate());
@@ -230,9 +265,88 @@ class StatisticsServiceTest {
         when(subjectInDirectionRepository.findById(1L)).thenReturn(Optional.of(sid));
         when(subjectPracticeRepository.findBySubjectDirectionId(1L)).thenReturn(List.of());
 
-        PracticeStatisticsResponse r = statisticsService.getPracticeStatistics(1L, "viewer@test.ru");
+        PracticeStatisticsResponse r = statisticsService.getPracticeStatistics(1L, "viewer@test.ru", null);
         assertEquals(0, r.getTotalPractices());
         assertEquals(0.0, r.getOverallProgress());
+    }
+
+    @Test
+    @DisplayName("fill_rate: обязанные без строки practice_grades считаются как без результата")
+    void practiceFillRateCountsMissingWithoutRows() {
+        SubjectPractice p = SubjectPractice.builder()
+                .id(1L).subjectDirection(sid).practiceNumber(1)
+                .practiceTitle("Лаб 1").maxGrade(10).isCredit(false).build();
+        PracticeGrade pg1 = PracticeGrade.builder().id(1L).student(s1).practice(p).grade(10).build();
+
+        StudentProfile sp1 = StudentProfile.builder().id(1L).user(s1).group(group).build();
+        StudentProfile sp2 = StudentProfile.builder().id(2L).user(s2).group(group).build();
+        StudentProfile sp3 = StudentProfile.builder().id(3L).user(s3).group(group).build();
+        when(studentProfileRepository.findByGroupId(1L)).thenReturn(List.of(sp1, sp2, sp3));
+        when(subjectInDirectionRepository.findById(1L)).thenReturn(Optional.of(sid));
+        when(subjectPracticeRepository.findBySubjectDirectionId(1L)).thenReturn(List.of(p));
+        when(practiceGradeRepository.findByPracticeId(1L)).thenReturn(List.of(pg1));
+
+        PracticeStatisticsResponse r = statisticsService.getPracticeStatistics(1L, "viewer@test.ru", null);
+
+        assertEquals(3, r.getTotalRequiredStudents());
+        assertEquals(1, r.getCountedValues());
+        assertEquals(2, r.getMissingValues());
+        assertEquals(33.33, r.getOverallProgress(), 0.01);
+        PracticeStatisticsResponse.PracticeDetail d = r.getPractices().get(0);
+        assertEquals(33.33, d.getCompletionRate(), 0.01);
+        assertEquals(1, d.getWithResult());
+    }
+
+    @Test
+    @DisplayName("Оценка 8 при max_grade=10 участвует в среднем и в avg_norm %")
+    void practiceGradeEightWithMaxTen() {
+        SubjectPractice p = SubjectPractice.builder()
+                .id(1L).subjectDirection(sid).practiceNumber(1)
+                .practiceTitle("КР").maxGrade(10).isCredit(false).build();
+        PracticeGrade pg1 = PracticeGrade.builder().id(1L).student(s1).practice(p).grade(8).build();
+        StudentProfile sp1 = StudentProfile.builder().id(1L).user(s1).group(group).build();
+        when(studentProfileRepository.findByGroupId(1L)).thenReturn(List.of(sp1));
+        when(subjectInDirectionRepository.findById(1L)).thenReturn(Optional.of(sid));
+        when(subjectPracticeRepository.findBySubjectDirectionId(1L)).thenReturn(List.of(p));
+        when(practiceGradeRepository.findByPracticeId(1L)).thenReturn(List.of(pg1));
+
+        PracticeStatisticsResponse r = statisticsService.getPracticeStatistics(1L, "viewer@test.ru", null);
+        PracticeStatisticsResponse.PracticeDetail d = r.getPractices().get(0);
+        assertEquals(8.0, d.getAverageGrade(), 0.01);
+        assertEquals(80.0, d.getAverageNormalizedPercent(), 0.01);
+    }
+
+    @Test
+    @DisplayName("Статистика расписания преподавателя: weekNumber ограничивает выборку")
+    void teacherScheduleUsesWeekFilter() {
+        Users teacher = Users.builder().id(1L).email("t@sched.ru").userType(UserType.TEACHER).build();
+        TeacherProfile tp = TeacherProfile.builder().id(20L).user(teacher).university(university).build();
+        Schedule sc1 = Schedule.builder().id(1L).dayOfWeek(1).weekNumber(1)
+                .startTime(LocalTime.of(9, 0)).endTime(LocalTime.of(10, 0)).build();
+
+        when(usersRepository.findByEmail("viewer@test.ru")).thenReturn(Optional.of(teacher));
+        when(usersRepository.findById(1L)).thenReturn(Optional.of(teacher));
+        when(teacherProfileRepository.findByUserId(1L)).thenReturn(Optional.of(tp));
+        when(scheduleRepository.findByTeacherIdAndWeekNumber(1L, 1)).thenReturn(List.of(sc1));
+
+        ScheduleStatisticsResponse r = statisticsService.getTeacherScheduleStatistics(1L, "viewer@test.ru", 1);
+
+        assertEquals(1, r.getTotalLessons());
+        assertEquals(Integer.valueOf(1), r.getWeekNumberFilter());
+        verify(scheduleRepository, never()).findByTeacherId(anyLong());
+        verify(scheduleRepository).findByTeacherIdAndWeekNumber(1L, 1);
+    }
+
+    @Test
+    @DisplayName("groupId не из направления дисциплины — BadRequestException")
+    void subjectStatsWrongGroup() {
+        AcademicGroup otherGroup = AcademicGroup.builder().id(99L).name("X").direction(
+                StudyDirection.builder().id(2L).name("Другое").institute(institute).build()).build();
+        when(subjectInDirectionRepository.findById(1L)).thenReturn(Optional.of(sid));
+        when(academicGroupRepository.findById(99L)).thenReturn(Optional.of(otherGroup));
+
+        assertThrows(BadRequestException.class,
+                () -> statisticsService.getSubjectStatistics(1L, "viewer@test.ru", 99L));
     }
 
     // ── Group statistics ─────────────────────────────────────────
@@ -407,7 +521,7 @@ class StatisticsServiceTest {
         when(teacherProfileRepository.findByUserId(1L)).thenReturn(Optional.of(tp));
         when(scheduleRepository.findByTeacherId(1L)).thenReturn(List.of(sc1, sc2));
 
-        ScheduleStatisticsResponse r = statisticsService.getTeacherScheduleStatistics(1L, "viewer@test.ru");
+        ScheduleStatisticsResponse r = statisticsService.getTeacherScheduleStatistics(1L, "viewer@test.ru", null);
 
         assertEquals("teacher", r.getScope());
         assertEquals(2, r.getTotalLessons());
@@ -426,7 +540,7 @@ class StatisticsServiceTest {
         when(academicGroupRepository.findById(1L)).thenReturn(Optional.of(group));
         when(scheduleRepository.findByGroupId(1L)).thenReturn(List.of(sc));
 
-        ScheduleStatisticsResponse r = statisticsService.getGroupScheduleStatistics(1L, "viewer@test.ru");
+        ScheduleStatisticsResponse r = statisticsService.getGroupScheduleStatistics(1L, "viewer@test.ru", null);
 
         assertEquals("group", r.getScope());
         assertEquals(1, r.getTotalLessons());
@@ -440,7 +554,7 @@ class StatisticsServiceTest {
         when(classroomRepository.findById(99L)).thenReturn(Optional.of(c99));
         when(scheduleRepository.findByClassroomId(99L)).thenReturn(List.of());
 
-        ScheduleStatisticsResponse r = statisticsService.getClassroomScheduleStatistics(99L, "viewer@test.ru");
+        ScheduleStatisticsResponse r = statisticsService.getClassroomScheduleStatistics(99L, "viewer@test.ru", null);
 
         assertEquals(0, r.getTotalLessons());
         assertEquals(0.0, r.getTotalHours());
@@ -450,7 +564,8 @@ class StatisticsServiceTest {
     @DisplayName("Teacher not found throws ResourceNotFoundException")
     void teacherScheduleNotFound() {
         when(teacherProfileRepository.findByUserId(99L)).thenReturn(Optional.empty());
-        assertThrows(ResourceNotFoundException.class, () -> statisticsService.getTeacherScheduleStatistics(99L, "viewer@test.ru"));
+        assertThrows(ResourceNotFoundException.class,
+                () -> statisticsService.getTeacherScheduleStatistics(99L, "viewer@test.ru", null));
     }
 
     @Test
@@ -462,7 +577,7 @@ class StatisticsServiceTest {
                 .startTime(LocalTime.of(12, 0)).endTime(LocalTime.of(11, 0)).build();
         when(scheduleRepository.findByClassroomId(5L)).thenReturn(List.of(bad));
 
-        ScheduleStatisticsResponse r = statisticsService.getClassroomScheduleStatistics(5L, "viewer@test.ru");
+        ScheduleStatisticsResponse r = statisticsService.getClassroomScheduleStatistics(5L, "viewer@test.ru", null);
 
         assertEquals(1, r.getTotalLessons());
         assertEquals(0.0, r.getTotalHours(), 0.001);

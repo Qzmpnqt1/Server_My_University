@@ -4,9 +4,9 @@ import org.example.dto.response.*;
 
 public interface StatisticsService {
 
-    SubjectStatisticsResponse getSubjectStatistics(Long subjectDirectionId, String viewerEmail);
+    SubjectStatisticsResponse getSubjectStatistics(Long subjectDirectionId, String viewerEmail, Long groupId);
 
-    PracticeStatisticsResponse getPracticeStatistics(Long subjectDirectionId, String viewerEmail);
+    PracticeStatisticsResponse getPracticeStatistics(Long subjectDirectionId, String viewerEmail, Long groupId);
 
     GroupStatisticsResponse getGroupStatistics(Long groupId, String viewerEmail);
 
@@ -16,11 +16,11 @@ public interface StatisticsService {
 
     UniversityStatisticsResponse getUniversityStatistics(Long universityId, String viewerEmail);
 
-    ScheduleStatisticsResponse getTeacherScheduleStatistics(Long teacherId, String viewerEmail);
+    ScheduleStatisticsResponse getTeacherScheduleStatistics(Long teacherId, String viewerEmail, Integer weekNumber);
 
-    ScheduleStatisticsResponse getGroupScheduleStatistics(Long groupId, String viewerEmail);
+    ScheduleStatisticsResponse getGroupScheduleStatistics(Long groupId, String viewerEmail, Integer weekNumber);
 
-    ScheduleStatisticsResponse getClassroomScheduleStatistics(Long classroomId, String viewerEmail);
+    ScheduleStatisticsResponse getClassroomScheduleStatistics(Long classroomId, String viewerEmail, Integer weekNumber);
 
     StudentPerformanceSummaryResponse getMyStudentPerformanceSummary(String email, Integer course, Integer semester);
 }

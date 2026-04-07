@@ -14,6 +14,8 @@ import java.util.Map;
 public class GroupStatisticsResponse {
     private Long groupId;
     private String groupName;
+    /** Среднее только по итоговым экзаменационным оценкам 2–5 по плану направления группы. */
+    private String averagePerformanceScope;
     private double averagePerformance;
     private double debtRate;
     private int studentCount;

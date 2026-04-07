@@ -3,6 +3,7 @@ package org.example.service.impl;
 import lombok.RequiredArgsConstructor;
 import org.example.dto.response.*;
 import org.example.exception.AccessDeniedException;
+import org.example.exception.BadRequestException;
 import org.example.exception.ResourceNotFoundException;
 import org.example.model.*;
 import org.example.repository.*;
@@ -43,109 +44,158 @@ public class StatisticsServiceImpl implements StatisticsService {
     private final ClassroomRepository classroomRepository;
 
     @Override
-    public SubjectStatisticsResponse getSubjectStatistics(Long subjectDirectionId, String viewerEmail) {
-        log.debug("getSubjectStatistics subjectDirectionId={} viewer={}", subjectDirectionId, viewerEmail);
+    public SubjectStatisticsResponse getSubjectStatistics(Long subjectDirectionId, String viewerEmail, Long groupId) {
+        log.debug("getSubjectStatistics subjectDirectionId={} groupId={} viewer={}", subjectDirectionId, groupId,
+                viewerEmail);
         SubjectInDirection sid = subjectInDirectionRepository.findById(subjectDirectionId)
                 .orElseThrow(() -> new ResourceNotFoundException("Предмет в направлении не найден"));
         ensureSubjectDirectionAccess(sid, viewerEmail);
 
-        FinalAssessmentType atype = sid.getFinalAssessmentType() != null
-                ? sid.getFinalAssessmentType()
-                : FinalAssessmentType.EXAM;
-        List<Grade> grades = gradeRepository.findBySubjectDirectionId(subjectDirectionId);
+        List<StudentProfile> required = resolveRequiredStudentsForSubjectDirection(sid, groupId, viewerEmail);
+        int totalRequired = required.size();
+        String samplingScope = groupId != null ? "GROUP" : "DIRECTION_ALL_GROUPS";
+
+        List<Grade> allGrades = gradeRepository.findBySubjectDirectionId(subjectDirectionId);
+        Map<Long, Grade> gradeByStudentId = allGrades.stream()
+                .collect(Collectors.toMap(g -> g.getStudent().getId(), g -> g, (a, b) -> a));
+
+        FinalAssessmentType atype = StatisticsFinalAssessmentUtil.effectiveType(sid);
 
         if (atype == FinalAssessmentType.CREDIT) {
-            long creditTrue = grades.stream()
-                    .filter(g -> Boolean.TRUE.equals(g.getCreditStatus())).count();
-            long creditDefined = grades.stream()
-                    .filter(g -> g.getCreditStatus() != null).count();
-            int gradedStudents = (int) grades.stream()
-                    .filter(g -> g.getCreditStatus() != null).count();
+            int passed = 0;
+            int gradedStudents = 0;
+            for (StudentProfile sp : required) {
+                Grade g = gradeByStudentId.get(sp.getUser().getId());
+                if (g != null && g.getCreditStatus() != null) {
+                    gradedStudents++;
+                    if (Boolean.TRUE.equals(g.getCreditStatus())) {
+                        passed++;
+                    }
+                }
+            }
+            double creditRate = totalRequired > 0 ? 100.0 * passed / totalRequired : 0.0;
             return SubjectStatisticsResponse.builder()
                     .subjectDirectionId(subjectDirectionId)
+                    .directionId(sid.getDirection().getId())
+                    .groupIdFilter(groupId)
+                    .samplingScope(samplingScope)
+                    .averagePerformanceScope(null)
                     .subjectName(sid.getSubject().getName())
                     .assessmentType("CREDIT")
                     .averageGrade(0)
                     .medianGrade(0)
-                    .creditRate(round(creditDefined > 0 ? (double) creditTrue / creditDefined * 100.0 : 0.0))
-                    .totalStudents(grades.size())
+                    .creditRate(round(creditRate))
+                    .totalStudents(totalRequired)
                     .gradedStudents(gradedStudents)
-                    .missingValues(grades.size() - gradedStudents)
+                    .missingValues(Math.max(0, totalRequired - gradedStudents))
                     .gradeDistribution(Collections.emptyMap())
                     .build();
         }
 
-        List<Integer> numericGrades = grades.stream()
-                .map(Grade::getGrade)
-                .filter(Objects::nonNull)
-                .filter(g -> g >= 2 && g <= 5)
-                .collect(Collectors.toList());
-
-        int gradedStudents = (int) grades.stream()
-                .filter(g -> g.getGrade() != null && g.getGrade() >= 2 && g.getGrade() <= 5)
-                .count();
-
+        List<Integer> numericGrades = new ArrayList<>();
+        for (StudentProfile sp : required) {
+            Grade g = gradeByStudentId.get(sp.getUser().getId());
+            if (g != null && g.getGrade() != null && g.getGrade() >= 2 && g.getGrade() <= 5) {
+                numericGrades.add(g.getGrade());
+            }
+        }
+        int gradedStudents = numericGrades.size();
         return SubjectStatisticsResponse.builder()
                 .subjectDirectionId(subjectDirectionId)
+                .directionId(sid.getDirection().getId())
+                .groupIdFilter(groupId)
+                .samplingScope(samplingScope)
+                .averagePerformanceScope("EXAM_FINAL_GRADE_2_TO_5")
                 .subjectName(sid.getSubject().getName())
                 .assessmentType("EXAM")
                 .averageGrade(round(average(numericGrades)))
                 .medianGrade(round(calculateMedian(numericGrades)))
                 .creditRate(0)
-                .totalStudents(grades.size())
+                .totalStudents(totalRequired)
                 .gradedStudents(gradedStudents)
-                .missingValues(grades.size() - gradedStudents)
+                .missingValues(Math.max(0, totalRequired - gradedStudents))
                 .gradeDistribution(numericGrades.stream()
                         .collect(Collectors.groupingBy(g -> g, Collectors.counting())))
                 .build();
     }
 
     @Override
-    public PracticeStatisticsResponse getPracticeStatistics(Long subjectDirectionId, String viewerEmail) {
-        log.debug("getPracticeStatistics subjectDirectionId={} viewer={}", subjectDirectionId, viewerEmail);
+    public PracticeStatisticsResponse getPracticeStatistics(Long subjectDirectionId, String viewerEmail, Long groupId) {
+        log.debug("getPracticeStatistics subjectDirectionId={} groupId={} viewer={}", subjectDirectionId, groupId,
+                viewerEmail);
         SubjectInDirection sid = subjectInDirectionRepository.findById(subjectDirectionId)
                 .orElseThrow(() -> new ResourceNotFoundException("Предмет в направлении не найден"));
         ensureSubjectDirectionAccess(sid, viewerEmail);
+
+        List<StudentProfile> required = resolveRequiredStudentsForSubjectDirection(sid, groupId, viewerEmail);
+        int totalRequired = required.size();
+        String samplingScope = groupId != null ? "GROUP" : "DIRECTION_ALL_GROUPS";
 
         List<SubjectPractice> practices = new ArrayList<>(
                 subjectPracticeRepository.findBySubjectDirectionId(subjectDirectionId));
         RussianSort.sortSubjectPractices(practices);
 
         List<PracticeStatisticsResponse.PracticeDetail> details = new ArrayList<>();
-        int totalWith = 0, totalExpected = 0;
-        double scoreSum = 0.0;
-        int scoreCount = 0;
-
-        List<Double> practiceReferenceAverages = new ArrayList<>();
+        int totalWith = 0;
+        int totalSlots = 0;
+        List<Double> perPracticeRawAverages = new ArrayList<>();
+        List<Double> perPracticeNormPercents = new ArrayList<>();
 
         for (SubjectPractice p : practices) {
             List<PracticeGrade> pgs = practiceGradeRepository.findByPracticeId(p.getId());
-            int total = pgs.size();
+            Map<Long, PracticeGrade> byStudent = pgs.stream()
+                    .collect(Collectors.toMap(pg -> pg.getStudent().getId(), pg -> pg, (a, b) -> a));
+
             boolean creditPractice = Boolean.TRUE.equals(p.getIsCredit());
-            int withResult;
-            List<Integer> nums;
-            Double creditRateVal = null;
+            int withResult = 0;
+            int passedCredit = 0;
+            List<Integer> nums = new ArrayList<>();
+            List<Double> normPercentsThisPractice = new ArrayList<>();
+
+            for (StudentProfile sp : required) {
+                Long uid = sp.getUser().getId();
+                PracticeGrade pg = byStudent.get(uid);
+                if (creditPractice) {
+                    if (pg != null && pg.getCreditStatus() != null) {
+                        withResult++;
+                        if (Boolean.TRUE.equals(pg.getCreditStatus())) {
+                            passedCredit++;
+                        }
+                    }
+                } else {
+                    if (StatisticsFinalAssessmentUtil.practiceResultComplete(pg, p)) {
+                        withResult++;
+                    }
+                    if (pg != null && StatisticsFinalAssessmentUtil.isValidNumericPracticeGrade(pg.getGrade(),
+                            p.getMaxGrade())) {
+                        int gr = pg.getGrade();
+                        nums.add(gr);
+                        double np = StatisticsFinalAssessmentUtil.normPercentOfPracticeGrade(gr, p.getMaxGrade());
+                        if (!Double.isNaN(np)) {
+                            normPercentsThisPractice.add(np);
+                        }
+                    }
+                }
+            }
+
+            double completionRate = totalRequired > 0 ? 100.0 * withResult / totalRequired : 0.0;
+            Double creditRateVal = creditPractice && totalRequired > 0
+                    ? round(100.0 * passedCredit / totalRequired)
+                    : null;
+
+            double avgGrade = 0.0;
             Double normalizedAvg = null;
-            if (creditPractice) {
-                withResult = (int) pgs.stream().filter(pg -> pg.getCreditStatus() != null).count();
-                nums = Collections.emptyList();
-                long cTrue = pgs.stream().filter(pg -> Boolean.TRUE.equals(pg.getCreditStatus())).count();
-                long cDef = pgs.stream().filter(pg -> pg.getCreditStatus() != null).count();
-                creditRateVal = cDef > 0 ? round((double) cTrue / cDef * 100.0) : null;
-            } else {
-                withResult = (int) pgs.stream()
-                        .filter(pg -> pg.getGrade() != null && pg.getGrade() >= 2 && pg.getGrade() <= 5)
-                        .count();
-                nums = pgs.stream()
-                        .map(PracticeGrade::getGrade)
-                        .filter(Objects::nonNull)
-                        .filter(g -> g >= 2 && g <= 5)
-                        .collect(Collectors.toList());
+            Double avgNormPercent = null;
+            if (!creditPractice) {
                 if (!nums.isEmpty()) {
                     double rawAvg = average(nums);
+                    avgGrade = round(rawAvg);
                     Double toFive = StatisticsFinalAssessmentUtil.normalizedAverageToFivePoint(rawAvg, p.getMaxGrade());
                     normalizedAvg = toFive != null ? round(toFive) : null;
-                    practiceReferenceAverages.add(toFive != null ? toFive : rawAvg);
+                    avgNormPercent = round(normPercentsThisPractice.stream()
+                            .mapToDouble(Double::doubleValue).average().orElse(0.0));
+                    perPracticeRawAverages.add(rawAvg);
+                    perPracticeNormPercents.add(avgNormPercent);
                 }
             }
 
@@ -153,37 +203,40 @@ public class StatisticsServiceImpl implements StatisticsService {
                     .practiceId(p.getId())
                     .practiceNumber(p.getPracticeNumber())
                     .practiceTitle(p.getPracticeTitle())
-                    .totalRecords(total)
+                    .totalRecords(pgs.size())
+                    .totalRequiredStudents(totalRequired)
                     .withResult(withResult)
-                    .completionRate(round(total > 0 ? (double) withResult / total * 100.0 : 0.0))
-                    .averageGrade(creditPractice ? 0.0 : round(nums.isEmpty() ? 0.0 : average(nums)))
+                    .completionRate(round(completionRate))
+                    .averageGrade(avgGrade)
                     .creditRate(creditRateVal)
                     .normalizedAverage(normalizedAvg)
+                    .averageNormalizedPercent(avgNormPercent)
                     .build());
 
             totalWith += withResult;
-            totalExpected += total;
-            for (int g : nums) {
-                scoreSum += g;
-                scoreCount++;
-            }
+            totalSlots += totalRequired;
         }
 
-        double progress = totalExpected > 0 ? (double) totalWith / totalExpected * 100.0 : 0.0;
-
-        double totalScoreAvg = practiceReferenceAverages.isEmpty()
-                ? (scoreCount > 0 ? scoreSum / scoreCount : 0.0)
-                : practiceReferenceAverages.stream().mapToDouble(Double::doubleValue).average().orElse(0.0);
+        double progress = totalSlots > 0 ? (double) totalWith / totalSlots * 100.0 : 0.0;
+        double totalScoreAvg = perPracticeRawAverages.stream().mapToDouble(Double::doubleValue).average().orElse(0.0);
+        Double aggNorm = perPracticeNormPercents.isEmpty()
+                ? null
+                : round(perPracticeNormPercents.stream().mapToDouble(Double::doubleValue).average().orElse(0.0));
 
         return PracticeStatisticsResponse.builder()
                 .subjectDirectionId(subjectDirectionId)
+                .directionId(sid.getDirection().getId())
+                .groupIdFilter(groupId)
+                .samplingScope(samplingScope)
+                .totalRequiredStudents(totalRequired)
                 .subjectName(sid.getSubject().getName())
                 .overallProgress(round(progress))
                 .totalScoreAverage(round(totalScoreAvg))
+                .averageNormalizedPercentAcrossNumericPractices(aggNorm)
                 .completionPercentage(round(progress))
                 .totalPractices(practices.size())
-                .countedValues(totalExpected)
-                .missingValues(totalExpected - totalWith)
+                .countedValues(totalWith)
+                .missingValues(Math.max(0, totalSlots - totalWith))
                 .practices(details)
                 .build();
     }
@@ -259,6 +312,7 @@ public class StatisticsServiceImpl implements StatisticsService {
         return GroupStatisticsResponse.builder()
                 .groupId(groupId)
                 .groupName(group.getName())
+                .averagePerformanceScope("EXAM_FINAL_NUMERIC_2_TO_5")
                 .averagePerformance(round(average(allGrades)))
                 .debtRate(round(profiles.isEmpty() ? 0.0 : (double) withDebt / profiles.size() * 100.0))
                 .studentCount(profiles.size())
@@ -299,6 +353,7 @@ public class StatisticsServiceImpl implements StatisticsService {
         return DirectionStatisticsResponse.builder()
                 .directionId(directionId)
                 .directionName(dir.getName())
+                .averagePerformanceScope("EXAM_FINAL_NUMERIC_2_TO_5")
                 .averagePerformance(round(average(allGrades)))
                 .debtRate(round(totalStudents > 0 ? (double) totalDebt / totalStudents * 100.0 : 0.0))
                 .totalStudents(totalStudents)
@@ -339,6 +394,7 @@ public class StatisticsServiceImpl implements StatisticsService {
         return InstituteStatisticsResponse.builder()
                 .instituteId(instituteId)
                 .instituteName(inst.getName())
+                .averagePerformanceScope("EXAM_FINAL_NUMERIC_2_TO_5")
                 .averagePerformance(round(average(allGrades)))
                 .debtRate(round(totalStudents > 0 ? (double) totalDebt / totalStudents * 100.0 : 0.0))
                 .totalStudents(totalStudents)
@@ -382,6 +438,7 @@ public class StatisticsServiceImpl implements StatisticsService {
         return UniversityStatisticsResponse.builder()
                 .universityId(universityId)
                 .universityName(uni.getName())
+                .averagePerformanceScope("EXAM_FINAL_NUMERIC_2_TO_5")
                 .averagePerformance(round(average(allGrades)))
                 .debtRate(round(totalStudents > 0 ? (double) totalDebt / totalStudents * 100.0 : 0.0))
                 .totalStudents(totalStudents)
@@ -392,8 +449,9 @@ public class StatisticsServiceImpl implements StatisticsService {
     }
 
     @Override
-    public ScheduleStatisticsResponse getTeacherScheduleStatistics(Long teacherId, String viewerEmail) {
-        log.debug("getTeacherScheduleStatistics teacherId={} viewer={}", teacherId, viewerEmail);
+    public ScheduleStatisticsResponse getTeacherScheduleStatistics(Long teacherId, String viewerEmail,
+                                                                   Integer weekNumber) {
+        log.debug("getTeacherScheduleStatistics teacherId={} week={} viewer={}", teacherId, weekNumber, viewerEmail);
         Users viewer = usersRepository.findByEmail(viewerEmail)
                 .orElseThrow(() -> new AccessDeniedException("Пользователь не найден"));
         if (viewer.getUserType() == UserType.TEACHER && !viewer.getId().equals(teacherId)) {
@@ -402,29 +460,39 @@ public class StatisticsServiceImpl implements StatisticsService {
         ensureAdminTeacher(teacherId, viewerEmail);
         usersRepository.findById(teacherId)
                 .orElseThrow(() -> new ResourceNotFoundException("Преподаватель не найден"));
-        return buildScheduleStats("teacher", teacherId, scheduleRepository.findByTeacherId(teacherId));
+        List<Schedule> schedules = weekNumber == null
+                ? scheduleRepository.findByTeacherId(teacherId)
+                : scheduleRepository.findByTeacherIdAndWeekNumber(teacherId, weekNumber);
+        return buildScheduleStats("teacher", teacherId, schedules, weekNumber);
     }
 
     @Override
-    public ScheduleStatisticsResponse getGroupScheduleStatistics(Long groupId, String viewerEmail) {
-        log.debug("getGroupScheduleStatistics groupId={} viewer={}", groupId, viewerEmail);
+    public ScheduleStatisticsResponse getGroupScheduleStatistics(Long groupId, String viewerEmail, Integer weekNumber) {
+        log.debug("getGroupScheduleStatistics groupId={} week={} viewer={}", groupId, weekNumber, viewerEmail);
         AcademicGroup group = academicGroupRepository.findById(groupId)
                 .orElseThrow(() -> new ResourceNotFoundException("Группа не найдена"));
         ensureGroupAccess(group, viewerEmail);
-        return buildScheduleStats("group", groupId, scheduleRepository.findByGroupId(groupId));
+        List<Schedule> schedules = weekNumber == null
+                ? scheduleRepository.findByGroupId(groupId)
+                : scheduleRepository.findByGroupIdAndWeekNumber(groupId, weekNumber);
+        return buildScheduleStats("group", groupId, schedules, weekNumber);
     }
 
     @Override
-    public ScheduleStatisticsResponse getClassroomScheduleStatistics(Long classroomId, String viewerEmail) {
-        log.debug("getClassroomScheduleStatistics classroomId={} viewer={}", classroomId, viewerEmail);
+    public ScheduleStatisticsResponse getClassroomScheduleStatistics(Long classroomId, String viewerEmail,
+                                                                       Integer weekNumber) {
+        log.debug("getClassroomScheduleStatistics classroomId={} week={} viewer={}", classroomId, weekNumber,
+                viewerEmail);
         Users viewer = usersRepository.findByEmail(viewerEmail)
                 .orElseThrow(() -> new AccessDeniedException("Пользователь не найден"));
         if (viewer.getUserType() == UserType.TEACHER) {
             throw new AccessDeniedException("Сводка по аудиториям доступна только администратору");
         }
         ensureAdminClassroom(classroomId, viewerEmail);
-        return buildScheduleStats("classroom", classroomId,
-                scheduleRepository.findByClassroomId(classroomId));
+        List<Schedule> schedules = weekNumber == null
+                ? scheduleRepository.findByClassroomId(classroomId)
+                : scheduleRepository.findByClassroomIdAndWeekNumber(classroomId, weekNumber);
+        return buildScheduleStats("classroom", classroomId, schedules, weekNumber);
     }
 
     @Override
@@ -497,21 +565,53 @@ public class StatisticsServiceImpl implements StatisticsService {
         List<Long> pids = practices.stream().map(SubjectPractice::getId).collect(Collectors.toList());
         Map<Long, SubjectPractice> practiceById = practices.stream()
                 .collect(Collectors.toMap(SubjectPractice::getId, p -> p, (a, b) -> a));
-        int practicesWithResult = 0;
+        Map<Long, PracticeGrade> myPracticeGradesByPracticeId = new HashMap<>();
         if (!pids.isEmpty()) {
-            practicesWithResult = (int) practiceGradeRepository.findByStudentIdAndPracticeIdIn(user.getId(), pids).stream()
-                    .filter(pg -> {
-                        SubjectPractice pr = practiceById.get(pg.getPractice().getId());
-                        if (pr == null) return false;
-                        if (Boolean.TRUE.equals(pr.getIsCredit())) {
-                            return pg.getCreditStatus() != null;
-                        }
-                        return pg.getGrade() != null && pg.getGrade() >= 2 && pg.getGrade() <= 5;
-                    })
-                    .map(pg -> pg.getPractice().getId())
-                    .distinct()
-                    .count();
+            for (PracticeGrade pg : practiceGradeRepository.findByStudentIdAndPracticeIdIn(user.getId(), pids)) {
+                myPracticeGradesByPracticeId.put(pg.getPractice().getId(), pg);
+            }
         }
+        int practicesWithResult = 0;
+        for (SubjectPractice pr : practices) {
+            PracticeGrade pg = myPracticeGradesByPracticeId.get(pr.getId());
+            if (StatisticsFinalAssessmentUtil.practiceResultComplete(pg, pr)) {
+                practicesWithResult++;
+            }
+        }
+
+        List<SubjectPracticeProgressItem> perDiscipline = new ArrayList<>();
+        for (SubjectInDirection oneSid : sids) {
+            List<SubjectPractice> sprs = subjectPracticeRepository.findBySubjectDirectionId(oneSid.getId());
+            int t = sprs.size();
+            int done = 0;
+            int sumPoints = 0;
+            boolean anyNumeric = false;
+            for (SubjectPractice pr : sprs) {
+                PracticeGrade pg = myPracticeGradesByPracticeId.get(pr.getId());
+                if (StatisticsFinalAssessmentUtil.practiceResultComplete(pg, pr)) {
+                    done++;
+                }
+                if (!Boolean.TRUE.equals(pr.getIsCredit()) && pg != null
+                        && StatisticsFinalAssessmentUtil.isValidNumericPracticeGrade(pg.getGrade(), pr.getMaxGrade())) {
+                    sumPoints += pg.getGrade();
+                    anyNumeric = true;
+                }
+            }
+            double pPct = t == 0 ? 0.0 : round(100.0 * done / t);
+            perDiscipline.add(SubjectPracticeProgressItem.builder()
+                    .subjectDirectionId(oneSid.getId())
+                    .subjectName(oneSid.getSubject().getName())
+                    .course(oneSid.getCourse())
+                    .semester(oneSid.getSemester())
+                    .totalPractices(t)
+                    .practicesWithResult(done)
+                    .practiceProgressPercent(pPct)
+                    .sumNumericPracticePoints(anyNumeric ? sumPoints : null)
+                    .build());
+        }
+        perDiscipline.sort(Comparator
+                .comparing(SubjectPracticeProgressItem::getSubjectName, RussianSort::compareText)
+                .thenComparing(SubjectPracticeProgressItem::getSubjectDirectionId, Comparator.nullsLast(Long::compareTo)));
 
         double subjPct = planned == 0 ? 0 : round(100.0 * subjectsWithFinal / planned);
         double prPct = totalPractices == 0 ? 0 : round(100.0 * practicesWithResult / totalPractices);
@@ -527,10 +627,33 @@ public class StatisticsServiceImpl implements StatisticsService {
                 .practicesWithResult(practicesWithResult)
                 .subjectCompletionPercent(subjPct)
                 .practiceCompletionPercent(prPct)
+                .subjectPracticeProgressByDiscipline(perDiscipline)
                 .build();
     }
 
     // ── helpers ──────────────────────────────────────────────────
+
+    /**
+     * Студенты, для которых дисциплина в направлении обязательна: вся группа или все группы направления.
+     */
+    private List<StudentProfile> resolveRequiredStudentsForSubjectDirection(SubjectInDirection sid, Long groupId,
+                                                                          String viewerEmail) {
+        if (groupId != null) {
+            AcademicGroup g = academicGroupRepository.findById(groupId)
+                    .orElseThrow(() -> new ResourceNotFoundException("Группа не найдена"));
+            if (!Objects.equals(g.getDirection().getId(), sid.getDirection().getId())) {
+                throw new BadRequestException("Группа не относится к направлению выбранной дисциплины");
+            }
+            ensureGroupAccess(g, viewerEmail);
+            return studentProfileRepository.findByGroupId(groupId);
+        }
+        List<AcademicGroup> groups = academicGroupRepository.findByDirectionId(sid.getDirection().getId());
+        List<StudentProfile> out = new ArrayList<>();
+        for (AcademicGroup g : groups) {
+            out.addAll(studentProfileRepository.findByGroupId(g.getId()));
+        }
+        return out;
+    }
 
     private void collectGradesForGroup(Long groupId, List<Integer> target) {
         AcademicGroup group = academicGroupRepository.findById(groupId).orElse(null);
@@ -659,7 +782,8 @@ public class StatisticsServiceImpl implements StatisticsService {
         });
     }
 
-    private ScheduleStatisticsResponse buildScheduleStats(String scope, Long entityId, List<Schedule> schedules) {
+    private ScheduleStatisticsResponse buildScheduleStats(String scope, Long entityId, List<Schedule> schedules,
+                                                            Integer weekNumberFilter) {
         double totalHours = schedules.stream()
                 .mapToDouble(s -> {
                     Duration d = Duration.between(s.getStartTime(), s.getEndTime());
@@ -671,6 +795,7 @@ public class StatisticsServiceImpl implements StatisticsService {
         return ScheduleStatisticsResponse.builder()
                 .scope(scope)
                 .entityId(entityId)
+                .weekNumberFilter(weekNumberFilter)
                 .totalLessons(schedules.size())
                 .totalHours(round(totalHours))
                 .byDayOfWeek(schedules.stream()

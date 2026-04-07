@@ -14,6 +14,7 @@ import java.util.List;
 public class DirectionStatisticsResponse {
     private Long directionId;
     private String directionName;
+    private String averagePerformanceScope;
     private double averagePerformance;
     private double debtRate;
     private int totalStudents;

@@ -48,7 +48,7 @@ class StatisticsControllerTest {
     @DisplayName("GET /statistics/subject/{id} — teacher OK")
     void subjectStats_Teacher_200() throws Exception {
         mockAuth("t", "t@u.ru", "TEACHER");
-        when(statisticsService.getSubjectStatistics(eq(1L), eq("t@u.ru"))).thenReturn(
+        when(statisticsService.getSubjectStatistics(eq(1L), eq("t@u.ru"), isNull())).thenReturn(
                 SubjectStatisticsResponse.builder().subjectDirectionId(1L).subjectName("Математика")
                         .averageGrade(4.0).medianGrade(4.0).creditRate(0.0)
                         .totalStudents(3).gradedStudents(3).missingValues(0)
@@ -82,7 +82,7 @@ class StatisticsControllerTest {
     @DisplayName("GET /statistics/practices/{id} — admin OK")
     void practiceStats_Admin_200() throws Exception {
         mockAuth("a", "a@u.ru", "ADMIN");
-        when(statisticsService.getPracticeStatistics(eq(1L), eq("a@u.ru"))).thenReturn(
+        when(statisticsService.getPracticeStatistics(eq(1L), eq("a@u.ru"), isNull())).thenReturn(
                 PracticeStatisticsResponse.builder().subjectDirectionId(1L).subjectName("Мат")
                         .overallProgress(75.0).totalScoreAverage(7.0).completionPercentage(75.0)
                         .totalPractices(2).countedValues(4).missingValues(1)
@@ -204,7 +204,7 @@ class StatisticsControllerTest {
     @DisplayName("GET /statistics/schedule/teacher/{id} — teacher OK")
     void teacherSchedule_Teacher_200() throws Exception {
         mockAuth("t", "t@u.ru", "TEACHER");
-        when(statisticsService.getTeacherScheduleStatistics(eq(1L), eq("t@u.ru"))).thenReturn(
+        when(statisticsService.getTeacherScheduleStatistics(eq(1L), eq("t@u.ru"), isNull())).thenReturn(
                 ScheduleStatisticsResponse.builder().scope("teacher").entityId(1L)
                         .totalLessons(5).totalHours(7.5).byDayOfWeek(Map.of()).byWeekNumber(Map.of()).build());
 
@@ -225,7 +225,7 @@ class StatisticsControllerTest {
     @DisplayName("GET /statistics/schedule/group/{id} — admin OK")
     void groupSchedule_Admin_200() throws Exception {
         mockAuth("a", "admin@u.ru", "ADMIN");
-        when(statisticsService.getGroupScheduleStatistics(eq(1L), eq("admin@u.ru"))).thenReturn(
+        when(statisticsService.getGroupScheduleStatistics(eq(1L), eq("admin@u.ru"), isNull())).thenReturn(
                 ScheduleStatisticsResponse.builder().scope("group").entityId(1L)
                         .totalLessons(3).totalHours(4.5).byDayOfWeek(Map.of()).byWeekNumber(Map.of()).build());
 
@@ -239,7 +239,7 @@ class StatisticsControllerTest {
     @DisplayName("GET /statistics/schedule/classroom/{id} — teacher OK")
     void classroomSchedule_Teacher_200() throws Exception {
         mockAuth("t", "t@u.ru", "TEACHER");
-        when(statisticsService.getClassroomScheduleStatistics(eq(1L), eq("t@u.ru"))).thenReturn(
+        when(statisticsService.getClassroomScheduleStatistics(eq(1L), eq("t@u.ru"), isNull())).thenReturn(
                 ScheduleStatisticsResponse.builder().scope("classroom").entityId(1L)
                         .totalLessons(0).totalHours(0.0).byDayOfWeek(Map.of()).byWeekNumber(Map.of()).build());
 
@@ -252,7 +252,7 @@ class StatisticsControllerTest {
     @DisplayName("GET /statistics/subject/{id} — not found returns 404")
     void subjectStats_NotFound_404() throws Exception {
         mockAuth("t", "t@u.ru", "TEACHER");
-        when(statisticsService.getSubjectStatistics(eq(99L), eq("t@u.ru")))
+        when(statisticsService.getSubjectStatistics(eq(99L), eq("t@u.ru"), isNull()))
                 .thenThrow(new ResourceNotFoundException("Предмет в направлении не найден"));
 
         mockMvc.perform(get("/api/v1/statistics/subject/99").header("Authorization", "Bearer t"))

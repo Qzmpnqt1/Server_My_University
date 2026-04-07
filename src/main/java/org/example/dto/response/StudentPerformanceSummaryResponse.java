@@ -5,6 +5,9 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
+import java.util.ArrayList;
+import java.util.List;
+
 @Data
 @Builder
 @NoArgsConstructor
@@ -24,4 +27,7 @@ public class StudentPerformanceSummaryResponse {
 
     private double subjectCompletionPercent;
     private double practiceCompletionPercent;
+
+    @Builder.Default
+    private List<SubjectPracticeProgressItem> subjectPracticeProgressByDiscipline = new ArrayList<>();
 }

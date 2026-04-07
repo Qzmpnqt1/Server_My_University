@@ -30,16 +30,20 @@ public class StatisticsController {
     @PreAuthorize("hasAnyRole('TEACHER','ADMIN')")
     public ResponseEntity<SubjectStatisticsResponse> getSubjectStatistics(
             @PathVariable Long subjectDirectionId,
+            @RequestParam(required = false) Long groupId,
             Principal principal) {
-        return ResponseEntity.ok(statisticsService.getSubjectStatistics(subjectDirectionId, principal.getName()));
+        return ResponseEntity.ok(statisticsService.getSubjectStatistics(
+                subjectDirectionId, principal.getName(), groupId));
     }
 
     @GetMapping("/practices/{subjectDirectionId}")
     @PreAuthorize("hasAnyRole('TEACHER','ADMIN')")
     public ResponseEntity<PracticeStatisticsResponse> getPracticeStatistics(
             @PathVariable Long subjectDirectionId,
+            @RequestParam(required = false) Long groupId,
             Principal principal) {
-        return ResponseEntity.ok(statisticsService.getPracticeStatistics(subjectDirectionId, principal.getName()));
+        return ResponseEntity.ok(statisticsService.getPracticeStatistics(
+                subjectDirectionId, principal.getName(), groupId));
     }
 
     @GetMapping("/group/{groupId}")
@@ -77,23 +81,29 @@ public class StatisticsController {
     @PreAuthorize("hasAnyRole('TEACHER','ADMIN')")
     public ResponseEntity<ScheduleStatisticsResponse> getTeacherScheduleStatistics(
             @PathVariable Long teacherId,
+            @RequestParam(required = false) Integer weekNumber,
             Principal principal) {
-        return ResponseEntity.ok(statisticsService.getTeacherScheduleStatistics(teacherId, principal.getName()));
+        return ResponseEntity.ok(statisticsService.getTeacherScheduleStatistics(
+                teacherId, principal.getName(), weekNumber));
     }
 
     @GetMapping("/schedule/group/{groupId}")
     @PreAuthorize("hasAnyRole('TEACHER','ADMIN')")
     public ResponseEntity<ScheduleStatisticsResponse> getGroupScheduleStatistics(
             @PathVariable Long groupId,
+            @RequestParam(required = false) Integer weekNumber,
             Principal principal) {
-        return ResponseEntity.ok(statisticsService.getGroupScheduleStatistics(groupId, principal.getName()));
+        return ResponseEntity.ok(statisticsService.getGroupScheduleStatistics(
+                groupId, principal.getName(), weekNumber));
     }
 
     @GetMapping("/schedule/classroom/{classroomId}")
     @PreAuthorize("hasAnyRole('TEACHER','ADMIN')")
     public ResponseEntity<ScheduleStatisticsResponse> getClassroomScheduleStatistics(
             @PathVariable Long classroomId,
+            @RequestParam(required = false) Integer weekNumber,
             Principal principal) {
-        return ResponseEntity.ok(statisticsService.getClassroomScheduleStatistics(classroomId, principal.getName()));
+        return ResponseEntity.ok(statisticsService.getClassroomScheduleStatistics(
+                classroomId, principal.getName(), weekNumber));
     }
 }

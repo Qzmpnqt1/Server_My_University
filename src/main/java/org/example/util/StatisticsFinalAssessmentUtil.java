@@ -2,7 +2,9 @@ package org.example.util;
 
 import org.example.model.FinalAssessmentType;
 import org.example.model.Grade;
+import org.example.model.PracticeGrade;
 import org.example.model.SubjectInDirection;
+import org.example.model.SubjectPractice;
 
 /**
  * Единая логика «итог по дисциплине» для статистики: экзамен (2–5) и зачёт (credit_status).
@@ -10,6 +12,35 @@ import org.example.model.SubjectInDirection;
 public final class StatisticsFinalAssessmentUtil {
 
     private StatisticsFinalAssessmentUtil() {
+    }
+
+    /**
+     * Согласовано с {@link org.example.service.impl.PracticeGradeServiceImpl#validateGrade}:
+     * при положительном max_grade допустимо 0..max_grade, иначе 2..5.
+     */
+    public static boolean isValidNumericPracticeGrade(Integer grade, Integer maxGrade) {
+        if (grade == null) {
+            return false;
+        }
+        if (maxGrade != null && maxGrade > 0) {
+            return grade >= 0 && grade <= maxGrade;
+        }
+        return grade >= 2 && grade <= 5;
+    }
+
+    public static boolean practiceResultComplete(PracticeGrade pg, SubjectPractice practice) {
+        if (Boolean.TRUE.equals(practice.getIsCredit())) {
+            return pg != null && pg.getCreditStatus() != null;
+        }
+        return pg != null && isValidNumericPracticeGrade(pg.getGrade(), practice.getMaxGrade());
+    }
+
+    /** norm_i = (grade / max_grade) * 100; при отсутствии max возвращает NaN. */
+    public static double normPercentOfPracticeGrade(int grade, Integer maxGrade) {
+        if (maxGrade == null || maxGrade <= 0) {
+            return Double.NaN;
+        }
+        return 100.0 * grade / maxGrade;
     }
 
     public static FinalAssessmentType effectiveType(SubjectInDirection s) {

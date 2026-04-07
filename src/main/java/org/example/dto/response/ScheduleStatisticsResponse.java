@@ -14,6 +14,8 @@ import java.util.Map;
 public class ScheduleStatisticsResponse {
     private String scope;
     private Long entityId;
+    /** Если null — статистика по всем неделям (прежнее поведение). */
+    private Integer weekNumberFilter;
     private int totalLessons;
     private double totalHours;
     private Map<Integer, Long> byDayOfWeek;
