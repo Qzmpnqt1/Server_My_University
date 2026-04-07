@@ -250,7 +250,7 @@ class ScheduleControllerTest {
     @DisplayName("GET /api/v1/schedule/compare/institutes — teacher")
     void compareInstitutes_Teacher_200() throws Exception {
         mockTeacherAuth();
-        when(scheduleCompareService.listInstitutes("teacher@uni.ru"))
+        when(scheduleCompareService.listInstitutes(eq("teacher@uni.ru"), isNull()))
                 .thenReturn(List.of(ScheduleCompareInstituteOptionResponse.builder()
                         .id(1L)
                         .name("Институт информационных технологий")

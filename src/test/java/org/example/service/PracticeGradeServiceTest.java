@@ -58,7 +58,9 @@ class PracticeGradeServiceTest {
     @BeforeEach
     void setUp() {
         subject = Subject.builder().id(1L).name("Программирование").build();
-        studyDirection = StudyDirection.builder().id(1L).name("ИВТ").build();
+        University uni = University.builder().id(1L).name("U").shortName("U").city("C").build();
+        Institute inst = Institute.builder().id(1L).name("Inst").shortName("I").university(uni).build();
+        studyDirection = StudyDirection.builder().id(1L).name("ИВТ").institute(inst).build();
         subjectInDirection = SubjectInDirection.builder()
                 .id(1L).subject(subject).direction(studyDirection).semester(1).course(1).build();
 
@@ -92,6 +94,8 @@ class PracticeGradeServiceTest {
         lenient().doNothing().when(universityScopeService).requireAdminOrSuperAdmin("admin@test.ru");
         lenient().doNothing().when(universityScopeService).assertUserInUniversity(anyLong(), eq(1L));
         lenient().doNothing().when(universityScopeService).assertSubjectDirectionInUniversity(anyLong(), eq(1L));
+        lenient().when(universityScopeService.enforceAccessToEntityUniversity(anyString(), anyLong()))
+                .thenAnswer(inv -> inv.getArgument(1));
     }
 
     private PracticeGrade samplePracticeGrade() {

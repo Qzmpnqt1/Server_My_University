@@ -1,5 +1,6 @@
 package org.example.service;
 
+import org.example.dto.mapper.TeacherProfileInfoMapper;
 import org.example.dto.request.ChangeEmailRequest;
 import org.example.dto.request.ChangePasswordRequest;
 import org.example.dto.response.UserProfileResponse;
@@ -42,6 +43,9 @@ class UserProfileServiceTest {
 
     @Mock
     private PasswordEncoder passwordEncoder;
+
+    @Mock
+    private TeacherProfileInfoMapper teacherProfileInfoMapper;
 
     @InjectMocks
     private UserProfileServiceImpl userProfileService;
@@ -163,6 +167,12 @@ class UserProfileServiceTest {
 
         when(usersRepository.findByEmail("teacher@test.ru")).thenReturn(Optional.of(teacherUser));
         when(teacherProfileRepository.findFetchedByUserId(20L)).thenReturn(Optional.of(teacherProfile));
+        when(teacherProfileInfoMapper.toInfo(teacherProfile)).thenReturn(UserProfileResponse.TeacherProfileInfo.builder()
+                .teacherProfileId(1L)
+                .instituteId(2L)
+                .instituteName("Институт физики")
+                .position("Доцент")
+                .build());
 
         UserProfileResponse response = userProfileService.getMyProfile("teacher@test.ru");
 

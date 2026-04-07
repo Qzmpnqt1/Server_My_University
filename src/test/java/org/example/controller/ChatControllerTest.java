@@ -80,7 +80,7 @@ class ChatControllerTest {
     @DisplayName("GET /chats/contacts — список контактов для нового чата")
     void getContacts_authenticated_200() throws Exception {
         mockAuth("token", "admin@uni.ru", "ADMIN");
-        when(chatService.listChatContacts("admin@uni.ru")).thenReturn(List.of(
+        when(chatService.listChatContacts(eq("admin@uni.ru"), isNull())).thenReturn(List.of(
                 ChatContactResponse.builder()
                         .id(2L).email("u@test.ru").firstName("Иван").lastName("Иванов")
                         .userType("STUDENT")
@@ -92,7 +92,7 @@ class ChatControllerTest {
                 .andExpect(jsonPath("$.length()").value(1))
                 .andExpect(jsonPath("$[0].email").value("u@test.ru"));
 
-        verify(chatService).listChatContacts("admin@uni.ru");
+        verify(chatService).listChatContacts(eq("admin@uni.ru"), isNull());
     }
 
     // ── GET /chats — get my conversations ─────────────────────────

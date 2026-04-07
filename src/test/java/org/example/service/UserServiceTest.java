@@ -4,6 +4,7 @@ import org.example.dto.response.UserProfileResponse;
 import org.example.exception.BadRequestException;
 import org.example.exception.ResourceNotFoundException;
 import org.example.model.*;
+import org.example.dto.mapper.TeacherProfileInfoMapper;
 import org.example.repository.*;
 import org.example.service.impl.UserServiceImpl;
 import org.junit.jupiter.api.BeforeEach;
@@ -49,6 +50,12 @@ class UserServiceTest {
 
     @Mock
     private UniversityScopeService universityScopeService;
+
+    @Mock
+    private TeacherSubjectRepository teacherSubjectRepository;
+
+    @Mock
+    private TeacherProfileInfoMapper teacherProfileInfoMapper;
 
     @InjectMocks
     private UserServiceImpl userService;
@@ -98,6 +105,11 @@ class UserServiceTest {
         when(usersRepository.findAll()).thenReturn(List.of(u1, u2));
         when(studentProfileRepository.findByUserId(1L)).thenReturn(Optional.of(sp1));
         when(teacherProfileRepository.findByUserId(2L)).thenReturn(Optional.of(tp2));
+        when(teacherProfileInfoMapper.toInfo(tp2)).thenReturn(UserProfileResponse.TeacherProfileInfo.builder()
+                .teacherProfileId(2L)
+                .instituteId(1L)
+                .instituteName("I")
+                .build());
 
         List<UserProfileResponse> result = userService.getAllUsers(null, null, null, null, null, null, "admin@uni.ru");
 
@@ -145,6 +157,8 @@ class UserServiceTest {
                 .institute(institute)
                 .build();
 
+        Users admin = buildUser(99L, "admin@uni.ru", UserType.ADMIN, true, "Admin", "User", null);
+        when(usersRepository.findByEmail("admin@uni.ru")).thenReturn(Optional.of(admin));
         when(usersRepository.findById(1L)).thenReturn(Optional.of(student));
         when(studentProfileRepository.findFetchedByUserId(1L)).thenReturn(Optional.of(profile));
 
@@ -163,10 +177,12 @@ class UserServiceTest {
 
     @Test
     void getUserById_NotFound() {
+        Users superAdmin = buildUser(200L, "super@uni.ru", UserType.SUPER_ADMIN, true, "S", "A", null);
+        when(usersRepository.findByEmail("super@uni.ru")).thenReturn(Optional.of(superAdmin));
         when(usersRepository.findById(1L)).thenReturn(Optional.empty());
 
         ResourceNotFoundException ex = assertThrows(ResourceNotFoundException.class,
-                () -> userService.getUserById(1L, "admin@uni.ru"));
+                () -> userService.getUserById(1L, "super@uni.ru"));
         assertTrue(ex.getMessage().contains("1"));
     }
 

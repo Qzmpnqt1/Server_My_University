@@ -61,10 +61,12 @@ class ScheduleServiceTest {
                 .firstName("Алексей").lastName("Попов").middleName("Сергеевич")
                 .userType(UserType.TEACHER).isActive(true).build();
 
-        StudyDirection direction = StudyDirection.builder().id(1L).name("ИТ").build();
+        University uni = University.builder().id(1L).name("U").shortName("U").city("C").build();
+        Institute institute = Institute.builder().id(1L).name("Inst").shortName("I").university(uni).build();
+        StudyDirection direction = StudyDirection.builder().id(1L).name("ИТ").institute(institute).build();
         group = AcademicGroup.builder().id(1L).name("ИТ-201").course(2).direction(direction).build();
 
-        classroom = Classroom.builder().id(1L).building("Корпус А").roomNumber("305").build();
+        classroom = Classroom.builder().id(1L).building("Корпус А").roomNumber("305").university(uni).build();
 
         subject = Subject.builder().id(1L).name("Математика").build();
 
@@ -85,6 +87,8 @@ class ScheduleServiceTest {
         lenient().doNothing().when(universityScopeService).assertAcademicGroupInUniversity(anyLong(), eq(1L));
         lenient().doNothing().when(universityScopeService).assertClassroomInUniversity(anyLong(), eq(1L));
         lenient().doNothing().when(universityScopeService).assertUserInUniversity(anyLong(), eq(1L));
+        lenient().when(universityScopeService.enforceAccessToEntityUniversity(anyString(), anyLong()))
+                .thenAnswer(inv -> inv.getArgument(1));
     }
 
     private ScheduleRequest buildValidRequest() {
@@ -115,6 +119,10 @@ class ScheduleServiceTest {
     @Test
     @DisplayName("getAll returns all schedule entries")
     void getAll() {
+        Users admin = Users.builder()
+                .id(99L).email("admin@test.ru").userType(UserType.ADMIN).isActive(true)
+                .firstName("A").lastName("B").build();
+        when(usersRepository.findByEmail("admin@test.ru")).thenReturn(Optional.of(admin));
         when(scheduleRepository.findAllByUniversityId(1L)).thenReturn(List.of(sampleSchedule));
         List<ScheduleResponse> result = scheduleService.getAllForAdmin("admin@test.ru", null);
         assertEquals(1, result.size());

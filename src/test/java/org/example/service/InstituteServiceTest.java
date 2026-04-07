@@ -216,17 +216,23 @@ class InstituteServiceTest {
 
     @Test
     void delete_WhenExists_DeletesById() {
-        when(instituteRepository.existsById(60L)).thenReturn(true);
+        University uni = university(1L, "Uni");
+        Institute existing = Institute.builder()
+                .id(60L)
+                .name("Inst")
+                .university(uni)
+                .build();
+        when(instituteRepository.findById(60L)).thenReturn(Optional.of(existing));
 
         instituteService.delete(60L, "admin@test.ru");
 
-        verify(instituteRepository).existsById(60L);
+        verify(instituteRepository).findById(60L);
         verify(instituteRepository).deleteById(60L);
     }
 
     @Test
     void delete_WhenNotFound_ThrowsResourceNotFoundException() {
-        when(instituteRepository.existsById(61L)).thenReturn(false);
+        when(instituteRepository.findById(61L)).thenReturn(Optional.empty());
 
         ResourceNotFoundException ex = assertThrows(
                 ResourceNotFoundException.class,

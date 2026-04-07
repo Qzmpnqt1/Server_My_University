@@ -9,12 +9,12 @@ import org.example.exception.BadRequestException;
 import org.example.exception.ResourceNotFoundException;
 import org.example.model.*;
 import org.example.repository.StudentProfileRepository;
-import org.example.repository.TeacherProfileRepository;
 import org.example.repository.UsersRepository;
 import org.example.repository.cassandra.CassandraConversationRepository;
 import org.example.repository.cassandra.CassandraMessageRepository;
 import org.example.service.impl.ChatServiceImpl;
 import org.example.service.UniversityScopeService;
+import org.example.service.ViewerUniversityResolver;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -39,11 +39,11 @@ class ChatServiceTest {
 
     @Mock private UsersRepository usersRepository;
     @Mock private StudentProfileRepository studentProfileRepository;
-    @Mock private TeacherProfileRepository teacherProfileRepository;
     @Mock private CassandraConversationRepository conversationRepo;
     @Mock private CassandraMessageRepository messageRepo;
     @Mock private NotificationService notificationService;
     @Mock private UniversityScopeService universityScopeService;
+    @Mock private ViewerUniversityResolver viewerUniversityResolver;
 
     private ChatServiceImpl chatService;
 
@@ -56,8 +56,9 @@ class ChatServiceTest {
     @BeforeEach
     void setUp() {
         lenient().doNothing().when(notificationService).notifyNewChatMessage(anyLong(), anyString());
-        chatService = new ChatServiceImpl(usersRepository, studentProfileRepository, teacherProfileRepository,
-                conversationRepo, messageRepo, notificationService, universityScopeService);
+        chatService = new ChatServiceImpl(usersRepository, studentProfileRepository,
+                conversationRepo, messageRepo, notificationService, universityScopeService,
+                viewerUniversityResolver);
 
         student = Users.builder()
                 .id(2L).email("student@test.ru").firstName("Пётр").lastName("Иванов")
@@ -256,7 +257,7 @@ class ChatServiceTest {
             Institute inst = Institute.builder().id(1L).name("ИТИ").university(uni).build();
             AcademicGroup group = AcademicGroup.builder().id(1L).name("ИТ-101").build();
             StudentProfile sp = StudentProfile.builder().id(1L).user(student).group(group).institute(inst).build();
-            when(studentProfileRepository.findByUserId(2L)).thenReturn(Optional.of(sp));
+            when(studentProfileRepository.findFetchedByUserId(2L)).thenReturn(Optional.of(sp));
             when(universityScopeService.userBelongsToUniversity(3L, 1L)).thenReturn(true);
 
             SendMessageRequest req = SendMessageRequest.builder()

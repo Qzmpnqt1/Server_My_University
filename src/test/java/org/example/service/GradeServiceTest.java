@@ -29,6 +29,9 @@ import static org.mockito.Mockito.*;
 class GradeServiceTest {
 
     @Mock private GradeRepository gradeRepository;
+    @Mock private PracticeGradeRepository practiceGradeRepository;
+    @Mock private SubjectPracticeRepository subjectPracticeRepository;
+    @Mock private AcademicGroupRepository academicGroupRepository;
     @Mock private UsersRepository usersRepository;
     @Mock private SubjectInDirectionRepository subjectInDirectionRepository;
     @Mock private StudentProfileRepository studentProfileRepository;
@@ -75,6 +78,7 @@ class GradeServiceTest {
         studentProfile = StudentProfile.builder().id(50L).user(studentUser).group(studentGroup).build();
 
         lenient().when(studentProfileRepository.findFetchedByUserId(3L)).thenReturn(Optional.of(studentProfile));
+        lenient().when(subjectPracticeRepository.countBySubjectDirectionId(anyLong())).thenReturn(0L);
 
         lenient().doNothing().when(notificationService).notifyGradeChanged(anyLong(), anyString(), anyBoolean());
         lenient().when(universityScopeService.requireCampusUniversityId("admin@test.ru")).thenReturn(1L);

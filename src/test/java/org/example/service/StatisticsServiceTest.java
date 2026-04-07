@@ -43,6 +43,7 @@ class StatisticsServiceTest {
     @Mock private UniversityScopeService universityScopeService;
     @Mock private TeacherProfileRepository teacherProfileRepository;
     @Mock private TeacherSubjectRepository teacherSubjectRepository;
+    @Mock private ClassroomRepository classroomRepository;
 
     @InjectMocks
     private StatisticsServiceImpl statisticsService;
@@ -395,13 +396,15 @@ class StatisticsServiceTest {
     @Test
     @DisplayName("Teacher schedule statistics")
     void teacherScheduleStats() {
-        Users teacher = Users.builder().id(1L).userType(UserType.TEACHER).build();
+        Users teacher = Users.builder().id(1L).email("t@sched.ru").userType(UserType.TEACHER).build();
+        TeacherProfile tp = TeacherProfile.builder().id(20L).user(teacher).university(university).build();
         Schedule sc1 = Schedule.builder().id(1L).dayOfWeek(1).weekNumber(1)
                 .startTime(LocalTime.of(9, 0)).endTime(LocalTime.of(10, 30)).build();
         Schedule sc2 = Schedule.builder().id(2L).dayOfWeek(1).weekNumber(2)
                 .startTime(LocalTime.of(11, 0)).endTime(LocalTime.of(12, 30)).build();
 
         when(usersRepository.findById(1L)).thenReturn(Optional.of(teacher));
+        when(teacherProfileRepository.findByUserId(1L)).thenReturn(Optional.of(tp));
         when(scheduleRepository.findByTeacherId(1L)).thenReturn(List.of(sc1, sc2));
 
         ScheduleStatisticsResponse r = statisticsService.getTeacherScheduleStatistics(1L, "viewer@test.ru");
@@ -433,6 +436,8 @@ class StatisticsServiceTest {
     @Test
     @DisplayName("Classroom schedule with no entries returns 0")
     void classroomScheduleEmpty() {
+        Classroom c99 = Classroom.builder().id(99L).building("A").roomNumber("1").university(university).build();
+        when(classroomRepository.findById(99L)).thenReturn(Optional.of(c99));
         when(scheduleRepository.findByClassroomId(99L)).thenReturn(List.of());
 
         ScheduleStatisticsResponse r = statisticsService.getClassroomScheduleStatistics(99L, "viewer@test.ru");
@@ -444,13 +449,15 @@ class StatisticsServiceTest {
     @Test
     @DisplayName("Teacher not found throws ResourceNotFoundException")
     void teacherScheduleNotFound() {
-        when(usersRepository.findById(99L)).thenReturn(Optional.empty());
+        when(teacherProfileRepository.findByUserId(99L)).thenReturn(Optional.empty());
         assertThrows(ResourceNotFoundException.class, () -> statisticsService.getTeacherScheduleStatistics(99L, "viewer@test.ru"));
     }
 
     @Test
     @DisplayName("Schedule: отрицательная длительность не уходит в минус часов")
     void scheduleNegativeDurationIgnored() {
+        Classroom c5 = Classroom.builder().id(5L).building("A").roomNumber("1").university(university).build();
+        when(classroomRepository.findById(5L)).thenReturn(Optional.of(c5));
         Schedule bad = Schedule.builder().id(1L).dayOfWeek(1).weekNumber(1)
                 .startTime(LocalTime.of(12, 0)).endTime(LocalTime.of(11, 0)).build();
         when(scheduleRepository.findByClassroomId(5L)).thenReturn(List.of(bad));
