@@ -1,6 +1,7 @@
 package org.example.service.impl;
 
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.example.dto.request.GradeRequest;
 import org.example.dto.response.GradeResponse;
 import org.example.dto.response.PracticeGradeResponse;
@@ -15,6 +16,7 @@ import org.example.service.AuditService;
 import org.example.service.GradeService;
 import org.example.service.NotificationService;
 import org.example.service.UniversityScopeService;
+import org.example.util.CourseConsistency;
 import org.example.util.RussianSort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -25,10 +27,12 @@ import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class GradeServiceImpl implements GradeService {
@@ -59,7 +63,22 @@ public class GradeServiceImpl implements GradeService {
             throw new AccessDeniedException("Только студенты могут просматривать свои оценки");
         }
 
-        List<Grade> grades = new ArrayList<>(gradeRepository.findByStudentId(user.getId()));
+        StudentProfile sp = studentProfileRepository.findFetchedByUserId(user.getId())
+                .orElseThrow(() -> new ResourceNotFoundException("Профиль студента не найден"));
+
+        List<Grade> raw = gradeRepository.findByStudentId(user.getId());
+        List<Grade> grades = new ArrayList<>();
+        for (Grade g : raw) {
+            SubjectInDirection sid = g.getSubjectDirection();
+            if (CourseConsistency.studentProfileMatchesSubjectDirection(sp, sid)) {
+                grades.add(g);
+            } else {
+                log.warn(
+                        "getMyGrades: скрыта неконсистентная оценка id={} studentId={} subjectDirectionId={} "
+                                + "(курс группы {} ≠ курса дисциплины {})",
+                        g.getId(), user.getId(), sid.getId(), sp.getGroup().getCourse(), sid.getCourse());
+            }
+        }
         grades.sort(RussianSort.gradeEntityBySubjectPlanComparator());
         if (grades.isEmpty()) {
             return List.of();
@@ -105,7 +124,20 @@ public class GradeServiceImpl implements GradeService {
             // глобальный просмотр
         }
 
-        List<Grade> list = new ArrayList<>(gradeRepository.findByStudentId(studentId));
+        StudentProfile sp = studentProfileRepository.findFetchedByUserId(studentId)
+                .orElseThrow(() -> new ResourceNotFoundException("Профиль студента не найден"));
+
+        List<Grade> list = new ArrayList<>();
+        for (Grade g : gradeRepository.findByStudentId(studentId)) {
+            SubjectInDirection sid = g.getSubjectDirection();
+            if (CourseConsistency.studentProfileMatchesSubjectDirection(sp, sid)) {
+                list.add(g);
+            } else {
+                log.warn(
+                        "getByStudent: скрыта неконсистентная оценка id={} studentId={} subjectDirectionId={}",
+                        g.getId(), studentId, sid.getId());
+            }
+        }
         list.sort(RussianSort.gradeEntityBySubjectPlanComparator());
         if (list.isEmpty()) {
             return List.of();
@@ -139,7 +171,23 @@ public class GradeServiceImpl implements GradeService {
             throw new AccessDeniedException("Недостаточно прав");
         }
 
-        List<Grade> list = new ArrayList<>(gradeRepository.findBySubjectDirectionId(subjectDirectionId));
+        List<Grade> raw = gradeRepository.findBySubjectDirectionId(subjectDirectionId);
+        Set<Long> userIds = raw.stream().map(g -> g.getStudent().getId()).collect(Collectors.toSet());
+        Map<Long, StudentProfile> profileByUser = userIds.isEmpty()
+                ? Map.of()
+                : studentProfileRepository.findFetchedByUserIdIn(userIds).stream()
+                        .collect(Collectors.toMap(sp -> sp.getUser().getId(), sp -> sp, (a, b) -> a));
+        List<Grade> list = new ArrayList<>();
+        for (Grade g : raw) {
+            StudentProfile sp = profileByUser.get(g.getStudent().getId());
+            if (sp != null && CourseConsistency.studentProfileMatchesSubjectDirection(sp, sid)) {
+                list.add(g);
+            } else {
+                log.warn(
+                        "getBySubjectDirection: скрыта неконсистентная оценка id={} studentId={} subjectDirectionId={}",
+                        g.getId(), g.getStudent().getId(), subjectDirectionId);
+            }
+        }
         list.sort(RussianSort.gradeEntityByStudentNameComparator());
         int pc = (int) subjectPracticeRepository.countBySubjectDirectionId(subjectDirectionId);
         return list.stream()
@@ -164,7 +212,10 @@ public class GradeServiceImpl implements GradeService {
         }
 
         Long directionId = sid.getDirection().getId();
-        List<AcademicGroup> groups = academicGroupRepository.findByDirectionId(directionId);
+        Integer sidCourse = sid.getCourse();
+        List<AcademicGroup> groups = academicGroupRepository.findByDirectionId(directionId).stream()
+                .filter(g -> Objects.equals(g.getCourse(), sidCourse))
+                .collect(Collectors.toList());
         Map<Long, StudentProfile> byUser = new LinkedHashMap<>();
         for (AcademicGroup g : groups) {
             for (StudentProfile sp : studentProfileRepository.findByGroupId(g.getId())) {
@@ -358,9 +409,7 @@ public class GradeServiceImpl implements GradeService {
     private void assertStudentEligibleForSubjectDirection(Users student, SubjectInDirection sid, Long groupId) {
         StudentProfile sp = studentProfileRepository.findFetchedByUserId(student.getId())
                 .orElseThrow(() -> new BadRequestException("Профиль студента не найден"));
-        if (!sp.getGroup().getDirection().getId().equals(sid.getDirection().getId())) {
-            throw new BadRequestException("Студент не обучается на направлении выбранной дисциплины");
-        }
+        CourseConsistency.assertStudentProfileMatchesSubjectDirection(sp, sid);
         if (groupId != null && !sp.getGroup().getId().equals(groupId)) {
             throw new BadRequestException("Студент не из выбранной группы");
         }

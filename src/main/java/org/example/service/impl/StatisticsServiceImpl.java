@@ -9,6 +9,7 @@ import org.example.model.*;
 import org.example.repository.*;
 import org.example.service.StatisticsService;
 import org.example.service.UniversityScopeService;
+import org.example.util.CourseConsistency;
 import org.example.util.RussianSort;
 import org.example.util.StatisticsFinalAssessmentUtil;
 import org.slf4j.Logger;
@@ -249,7 +250,11 @@ public class StatisticsServiceImpl implements StatisticsService {
         ensureGroupAccess(group, viewerEmail);
 
         List<StudentProfile> profiles = studentProfileRepository.findByGroupId(groupId);
-        List<SubjectInDirection> sids = subjectInDirectionRepository.findByDirectionId(group.getDirection().getId());
+        Integer groupCourse = group.getCourse();
+        List<SubjectInDirection> sids = subjectInDirectionRepository.findByDirectionId(group.getDirection().getId())
+                .stream()
+                .filter(s -> Objects.equals(s.getCourse(), groupCourse))
+                .collect(Collectors.toList());
         List<Long> sidIds = sids.stream().map(SubjectInDirection::getId).collect(Collectors.toList());
 
         List<Integer> allGrades = new ArrayList<>();
@@ -507,9 +512,10 @@ public class StatisticsServiceImpl implements StatisticsService {
         StudentProfile sp = studentProfileRepository.findFetchedByUserId(user.getId())
                 .orElseThrow(() -> new ResourceNotFoundException("Профиль студента не найден"));
         Long directionId = sp.getGroup().getDirection().getId();
+        Integer effectiveCourse = course != null ? course : sp.getGroup().getCourse();
 
         List<SubjectInDirection> sids = subjectInDirectionRepository.findByDirectionId(directionId).stream()
-                .filter(sid -> course == null || Objects.equals(course, sid.getCourse()))
+                .filter(sid -> effectiveCourse == null || Objects.equals(effectiveCourse, sid.getCourse()))
                 .filter(sid -> semester == null || Objects.equals(semester, sid.getSemester()))
                 .collect(Collectors.toList());
 
@@ -617,7 +623,7 @@ public class StatisticsServiceImpl implements StatisticsService {
         double prPct = totalPractices == 0 ? 0 : round(100.0 * practicesWithResult / totalPractices);
 
         return StudentPerformanceSummaryResponse.builder()
-                .courseFilter(course)
+                .courseFilter(effectiveCourse)
                 .semesterFilter(semester)
                 .plannedSubjects(planned)
                 .subjectsWithFinalResult(subjectsWithFinal)
@@ -641,15 +647,17 @@ public class StatisticsServiceImpl implements StatisticsService {
         if (groupId != null) {
             AcademicGroup g = academicGroupRepository.findById(groupId)
                     .orElseThrow(() -> new ResourceNotFoundException("Группа не найдена"));
-            if (!Objects.equals(g.getDirection().getId(), sid.getDirection().getId())) {
-                throw new BadRequestException("Группа не относится к направлению выбранной дисциплины");
-            }
+            CourseConsistency.assertGroupMatchesSubjectDirection(g, sid);
             ensureGroupAccess(g, viewerEmail);
             return studentProfileRepository.findByGroupId(groupId);
         }
+        Integer sidCourse = sid.getCourse();
         List<AcademicGroup> groups = academicGroupRepository.findByDirectionId(sid.getDirection().getId());
         List<StudentProfile> out = new ArrayList<>();
         for (AcademicGroup g : groups) {
+            if (!Objects.equals(g.getCourse(), sidCourse)) {
+                continue;
+            }
             out.addAll(studentProfileRepository.findByGroupId(g.getId()));
         }
         return out;
@@ -659,7 +667,11 @@ public class StatisticsServiceImpl implements StatisticsService {
         AcademicGroup group = academicGroupRepository.findById(groupId).orElse(null);
         if (group == null) return;
         List<StudentProfile> profiles = studentProfileRepository.findByGroupId(groupId);
-        List<SubjectInDirection> sids = subjectInDirectionRepository.findByDirectionId(group.getDirection().getId());
+        Integer gc = group.getCourse();
+        List<SubjectInDirection> sids = subjectInDirectionRepository.findByDirectionId(group.getDirection().getId())
+                .stream()
+                .filter(s -> Objects.equals(s.getCourse(), gc))
+                .collect(Collectors.toList());
         List<Long> sidIds = sids.stream().map(SubjectInDirection::getId).collect(Collectors.toList());
         Map<Long, SubjectInDirection> sidEntity = sids.stream()
                 .collect(Collectors.toMap(SubjectInDirection::getId, s -> s, (a, b) -> a));

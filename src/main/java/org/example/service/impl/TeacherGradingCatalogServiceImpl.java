@@ -8,12 +8,14 @@ import org.example.exception.ResourceNotFoundException;
 import org.example.model.*;
 import org.example.repository.*;
 import org.example.service.TeacherGradingCatalogService;
+import org.example.util.CourseConsistency;
 import org.example.util.RussianSort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.stream.Collectors;
 
@@ -96,7 +98,9 @@ public class TeacherGradingCatalogServiceImpl implements TeacherGradingCatalogSe
                 .orElseThrow(() -> new ResourceNotFoundException("Позиция учебного плана не найдена"));
         assertTeacherTeachesSid(tp, subjectDirectionId);
         Long dirId = sid.getDirection().getId();
+        Integer sidCourse = sid.getCourse();
         return academicGroupRepository.findByDirectionId(dirId).stream()
+                .filter(g -> Objects.equals(g.getCourse(), sidCourse))
                 .map(g -> TeacherGradingPickResponse.builder()
                         .id(g.getId())
                         .name(g.getName())
@@ -114,9 +118,7 @@ public class TeacherGradingCatalogServiceImpl implements TeacherGradingCatalogSe
         assertTeacherTeachesSid(tp, subjectDirectionId);
         AcademicGroup group = academicGroupRepository.findById(groupId)
                 .orElseThrow(() -> new ResourceNotFoundException("Группа не найдена"));
-        if (!group.getDirection().getId().equals(sid.getDirection().getId())) {
-            throw new BadRequestException("Группа не относится к направлению выбранной дисциплины");
-        }
+        CourseConsistency.assertGroupMatchesSubjectDirection(group, sid);
         return studentProfileRepository.findByGroupId(groupId).stream()
                 .map(sp -> {
                     Users st = sp.getUser();
@@ -143,9 +145,7 @@ public class TeacherGradingCatalogServiceImpl implements TeacherGradingCatalogSe
         assertTeacherTeachesSid(tp, subjectDirectionId);
         AcademicGroup group = academicGroupRepository.findById(groupId)
                 .orElseThrow(() -> new ResourceNotFoundException("Группа не найдена"));
-        if (!group.getDirection().getId().equals(sid.getDirection().getId())) {
-            throw new BadRequestException("Группа не относится к направлению выбранной дисциплины");
-        }
+        CourseConsistency.assertGroupMatchesSubjectDirection(group, sid);
         Users student = usersRepository.findById(studentUserId)
                 .orElseThrow(() -> new ResourceNotFoundException("Студент не найден"));
         if (student.getUserType() != UserType.STUDENT) {

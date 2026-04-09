@@ -6,6 +6,7 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 
@@ -22,6 +23,15 @@ public interface StudentProfileRepository extends JpaRepository<StudentProfile, 
             WHERE sp.user.id = :userId
             """)
     Optional<StudentProfile> findFetchedByUserId(@Param("userId") Long userId);
+
+    @Query("""
+            SELECT DISTINCT sp FROM StudentProfile sp
+            JOIN FETCH sp.user
+            JOIN FETCH sp.group g
+            JOIN FETCH g.direction
+            WHERE sp.user.id IN :userIds
+            """)
+    List<StudentProfile> findFetchedByUserIdIn(@Param("userIds") Collection<Long> userIds);
 
     List<StudentProfile> findByGroupId(Long groupId);
 

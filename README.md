@@ -31,7 +31,7 @@ REST API backend for the **My University** platform — a university management 
                       └──────────────────────────────────────────┘
 ```
 
-**MySQL** stores all core domain entities — universities, institutes, study directions, academic groups, users, profiles, subjects, grades, schedules, classrooms, and audit logs. Schema is managed by Flyway migrations (`V1` through `V15`).
+**MySQL** stores all core domain entities — universities, institutes, study directions, academic groups, users, profiles, subjects, grades, schedules, classrooms, audit logs, and in-app notifications. Schema is managed by Flyway migrations (`V1`… SQL, Java `V22`, далее SQL, включая уведомления в `V24`).
 
 **Cassandra** powers the chat subsystem with two tables optimised for time-series queries: `conversations_by_user` and `messages_by_conversation`. The keyspace is initialised automatically by the `cassandra-init` service via `init-scripts/init-cassandra.cql`.
 
@@ -193,3 +193,5 @@ The `app` service in Docker Compose accepts the following overrides:
 ## CI/CD
 
 Сборка в GitHub Actions, публикация образа в GHCR и опциональный deploy описаны в **[docs/CI_CD.md](docs/CI_CD.md)**.
+
+Дополнительно: **[docs/DATABASE.md](docs/DATABASE.md)** (MySQL/Cassandra), **[docs/BACKUP_RESTORE.md](docs/BACKUP_RESTORE.md)**, **[docs/DIPLOM_TZ_DOCUMENTATION.md](docs/DIPLOM_TZ_DOCUMENTATION.md)**, **[docs/TZ_TRACEABILITY_MATRIX.md](docs/TZ_TRACEABILITY_MATRIX.md)**, **[docs/PROGRAMMA_I_METODIKA_ISPYTANIY.md](docs/PROGRAMMA_I_METODIKA_ISPYTANIY.md)**, **[docs/PERFORMANCE_AND_LOAD.md](docs/PERFORMANCE_AND_LOAD.md)**.

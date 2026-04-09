@@ -1,6 +1,7 @@
 package org.example.service.impl;
 
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.example.dto.request.PracticeGradeRequest;
 import org.example.dto.response.PracticeGradeResponse;
 import org.example.dto.response.StudentPracticeSlotResponse;
@@ -14,6 +15,7 @@ import org.example.service.AuditService;
 import org.example.service.NotificationService;
 import org.example.service.PracticeGradeService;
 import org.example.service.UniversityScopeService;
+import org.example.util.CourseConsistency;
 import org.example.util.RussianSort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -24,6 +26,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class PracticeGradeServiceImpl implements PracticeGradeService {
@@ -48,9 +51,15 @@ public class PracticeGradeServiceImpl implements PracticeGradeService {
             throw new AccessDeniedException("Только студенты могут просматривать свои оценки за практики");
         }
 
+        StudentProfile sp = studentProfileRepository.findFetchedByUserId(user.getId())
+                .orElseThrow(() -> new ResourceNotFoundException("Профиль студента не найден"));
+
         if (subjectDirectionId != null) {
-            subjectInDirectionRepository.findById(subjectDirectionId)
+            SubjectInDirection sid = subjectInDirectionRepository.findById(subjectDirectionId)
                     .orElseThrow(() -> new ResourceNotFoundException("Предмет в направлении не найден"));
+            if (!CourseConsistency.studentProfileMatchesSubjectDirection(sp, sid)) {
+                throw new AccessDeniedException("Нет доступа к оценкам за практики по этой дисциплине");
+            }
 
             List<SubjectPractice> practices = subjectPracticeRepository.findBySubjectDirectionId(subjectDirectionId);
             List<Long> practiceIds = practices.stream()
@@ -69,9 +78,17 @@ public class PracticeGradeServiceImpl implements PracticeGradeService {
             return pgList;
         }
 
-        List<PracticeGradeResponse> allPg = practiceGradeRepository.findByStudentId(user.getId()).stream()
-                .map(this::mapToResponse)
-                .collect(Collectors.toList());
+        List<PracticeGradeResponse> allPg = new ArrayList<>();
+        for (PracticeGrade pg : practiceGradeRepository.findByStudentId(user.getId())) {
+            SubjectInDirection sid = pg.getPractice().getSubjectDirection();
+            if (CourseConsistency.studentProfileMatchesSubjectDirection(sp, sid)) {
+                allPg.add(mapToResponse(pg));
+            } else {
+                log.warn(
+                        "getMyPracticeGrades: скрыта неконсистентная оценка за практику id={} studentId={}",
+                        pg.getId(), user.getId());
+            }
+        }
         allPg.sort(Comparator.comparing(PracticeGradeResponse::getPracticeTitle, RussianSort::compareText)
                 .thenComparing(PracticeGradeResponse::getPracticeNumber, Comparator.nullsLast(Integer::compareTo))
                 .thenComparing(PracticeGradeResponse::getId, Comparator.nullsLast(Long::compareTo)));
@@ -115,7 +132,9 @@ public class PracticeGradeServiceImpl implements PracticeGradeService {
     private void assertStudentOwnsSubjectDirection(Users student, SubjectInDirection sid) {
         StudentProfile sp = studentProfileRepository.findFetchedByUserId(student.getId())
                 .orElseThrow(() -> new BadRequestException("Профиль студента не найден"));
-        if (!sp.getGroup().getDirection().getId().equals(sid.getDirection().getId())) {
+        try {
+            CourseConsistency.assertStudentProfileMatchesSubjectDirection(sp, sid);
+        } catch (BadRequestException e) {
             throw new AccessDeniedException("Нет доступа к практикам этой дисциплины");
         }
     }
@@ -281,9 +300,7 @@ public class PracticeGradeServiceImpl implements PracticeGradeService {
         SubjectInDirection sid = practice.getSubjectDirection();
         StudentProfile sp = studentProfileRepository.findFetchedByUserId(student.getId())
                 .orElseThrow(() -> new BadRequestException("Профиль студента не найден"));
-        if (!sp.getGroup().getDirection().getId().equals(sid.getDirection().getId())) {
-            throw new BadRequestException("Студент не обучается на направлении выбранной дисциплины");
-        }
+        CourseConsistency.assertStudentProfileMatchesSubjectDirection(sp, sid);
         if (groupId != null && !sp.getGroup().getId().equals(groupId)) {
             throw new BadRequestException("Студент не из выбранной группы");
         }

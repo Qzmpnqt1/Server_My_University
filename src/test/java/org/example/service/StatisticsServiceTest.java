@@ -62,7 +62,7 @@ class StatisticsServiceTest {
         university = University.builder().id(1L).name("МГУ").build();
         institute = Institute.builder().id(1L).name("ИТИ").university(university).build();
         direction = StudyDirection.builder().id(1L).name("Информатика").institute(institute).build();
-        group = AcademicGroup.builder().id(1L).name("ИТ-201").course(2).direction(direction).build();
+        group = AcademicGroup.builder().id(1L).name("ИТ-201").course(1).direction(direction).build();
 
         subject = Subject.builder().id(1L).name("Математика").build();
         sid = SubjectInDirection.builder().id(1L).subject(subject).semester(1).course(1).direction(direction).build();
@@ -347,6 +347,18 @@ class StatisticsServiceTest {
                 () -> statisticsService.getSubjectStatistics(1L, "viewer@test.ru", 99L));
     }
 
+    @Test
+    @DisplayName("groupId: та же дисциплина, но группа другого курса — BadRequestException")
+    void subjectStatsGroupCourseMismatch() {
+        AcademicGroup wrongCourseGroup = AcademicGroup.builder()
+                .id(99L).name("ИТ-399").course(3).direction(direction).build();
+        when(subjectInDirectionRepository.findById(1L)).thenReturn(Optional.of(sid));
+        when(academicGroupRepository.findById(99L)).thenReturn(Optional.of(wrongCourseGroup));
+
+        assertThrows(BadRequestException.class,
+                () -> statisticsService.getSubjectStatistics(1L, "viewer@test.ru", 99L));
+    }
+
     // ── Group statistics ─────────────────────────────────────────
 
     @Test
@@ -426,7 +438,7 @@ class StatisticsServiceTest {
     @Test
     @DisplayName("Direction aggregates multiple groups")
     void directionStats() {
-        AcademicGroup g2 = AcademicGroup.builder().id(2L).name("ИТ-202").course(2).direction(direction).build();
+        AcademicGroup g2 = AcademicGroup.builder().id(2L).name("ИТ-202").course(1).direction(direction).build();
         StudentProfile sp1 = StudentProfile.builder().id(1L).user(s1).group(group).build();
         StudentProfile sp2 = StudentProfile.builder().id(2L).user(s2).group(g2).build();
 

@@ -76,10 +76,11 @@ class GradeServiceTest {
                 .userType(UserType.ADMIN).isActive(true).build();
 
         teacherProfile = TeacherProfile.builder().id(10L).user(teacherUser).build();
-        studentGroup = AcademicGroup.builder().id(100L).name("ИТ-101").direction(studyDirection).build();
+        studentGroup = AcademicGroup.builder().id(100L).name("ИТ-101").course(1).direction(studyDirection).build();
         studentProfile = StudentProfile.builder().id(50L).user(studentUser).group(studentGroup).build();
 
         lenient().when(studentProfileRepository.findFetchedByUserId(3L)).thenReturn(Optional.of(studentProfile));
+        lenient().when(studentProfileRepository.findFetchedByUserIdIn(any())).thenReturn(List.of(studentProfile));
         lenient().when(subjectPracticeRepository.countBySubjectDirectionId(anyLong())).thenReturn(0L);
 
         lenient().doNothing().when(notificationService).notifyGradeChanged(anyLong(), anyString(), anyBoolean());
@@ -108,6 +109,22 @@ class GradeServiceTest {
         assertEquals(1, result.size());
         assertEquals(5, result.get(0).getGrade());
         assertEquals("Иванов Иван", result.get(0).getStudentName());
+    }
+
+    @Test
+    @DisplayName("getMyGrades скрывает оценки при несовпадении курса группы и дисциплины")
+    void getMyGradesFiltersWrongCourse() {
+        SubjectInDirection sidOtherCourse = SubjectInDirection.builder()
+                .id(9L).subject(subject).direction(studyDirection).semester(2).course(2).build();
+        Grade inconsistent = Grade.builder()
+                .id(2L).student(studentUser).subjectDirection(sidOtherCourse).grade(3).build();
+
+        when(usersRepository.findByEmail("student@test.ru")).thenReturn(Optional.of(studentUser));
+        when(gradeRepository.findByStudentId(3L)).thenReturn(List.of(sampleGrade(), inconsistent));
+
+        List<GradeResponse> result = gradeService.getMyGrades("student@test.ru");
+        assertEquals(1, result.size());
+        assertEquals(5, result.get(0).getGrade());
     }
 
     @Test
@@ -272,6 +289,25 @@ class GradeServiceTest {
                 .thenReturn(Optional.of(Grade.builder().id(99L).build()));
 
         assertThrows(ConflictException.class, () -> gradeService.create(request, "teacher@test.ru"));
+        verify(gradeRepository, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("Create grade: курс группы не совпадает с курсом дисциплины — BadRequestException")
+    void createCourseMismatch() {
+        SubjectInDirection sidThirdCourse = SubjectInDirection.builder()
+                .id(2L).subject(subject).direction(studyDirection).semester(1).course(3).build();
+        GradeRequest request = GradeRequest.builder()
+                .studentId(3L).subjectDirectionId(2L).grade(5).build();
+
+        when(usersRepository.findByEmail("teacher@test.ru")).thenReturn(Optional.of(teacherUser));
+        when(usersRepository.findById(3L)).thenReturn(Optional.of(studentUser));
+        when(subjectInDirectionRepository.findById(2L)).thenReturn(Optional.of(sidThirdCourse));
+        when(teacherProfileRepository.findByUserId(2L)).thenReturn(Optional.of(teacherProfile));
+        when(teacherSubjectRepository.existsByTeacherIdAndSubjectInDirection_Id(10L, 2L)).thenReturn(true);
+        when(studentProfileRepository.findFetchedByUserId(3L)).thenReturn(Optional.of(studentProfile));
+
+        assertThrows(BadRequestException.class, () -> gradeService.create(request, "teacher@test.ru"));
         verify(gradeRepository, never()).save(any());
     }
 

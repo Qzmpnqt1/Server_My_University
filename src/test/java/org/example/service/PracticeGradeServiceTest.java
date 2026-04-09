@@ -85,7 +85,7 @@ class PracticeGradeServiceTest {
                 .userType(UserType.ADMIN).isActive(true).build();
 
         teacherProfile = TeacherProfile.builder().id(10L).user(teacherUser).build();
-        studentGroup = AcademicGroup.builder().id(200L).name("ПИ-21").direction(studyDirection).build();
+        studentGroup = AcademicGroup.builder().id(200L).name("ПИ-21").course(1).direction(studyDirection).build();
         studentProfile = StudentProfile.builder().id(60L).user(studentUser).group(studentGroup).build();
         lenient().when(studentProfileRepository.findFetchedByUserId(3L)).thenReturn(Optional.of(studentProfile));
 
@@ -321,6 +321,28 @@ class PracticeGradeServiceTest {
                 .thenReturn(Optional.of(PracticeGrade.builder().id(99L).build()));
 
         assertThrows(ConflictException.class, () -> practiceGradeService.create(request, "teacher@test.ru"));
+        verify(practiceGradeRepository, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("Create practice grade: курс дисциплины практики не совпадает с курсом группы — BadRequestException")
+    void createPracticeCourseMismatch() {
+        SubjectInDirection sidOther = SubjectInDirection.builder()
+                .id(5L).subject(subject).direction(studyDirection).semester(1).course(2).build();
+        SubjectPractice practiceOtherCourse = SubjectPractice.builder()
+                .id(11L).subjectDirection(sidOther).practiceNumber(1).practiceTitle("Лаб")
+                .maxGrade(10).isCredit(false).build();
+        PracticeGradeRequest request = PracticeGradeRequest.builder()
+                .studentId(3L).practiceId(11L).grade(8).build();
+
+        when(usersRepository.findByEmail("teacher@test.ru")).thenReturn(Optional.of(teacherUser));
+        when(usersRepository.findById(3L)).thenReturn(Optional.of(studentUser));
+        when(subjectPracticeRepository.findById(11L)).thenReturn(Optional.of(practiceOtherCourse));
+        when(teacherProfileRepository.findByUserId(2L)).thenReturn(Optional.of(teacherProfile));
+        when(teacherSubjectRepository.existsByTeacherIdAndSubjectInDirection_Id(10L, 5L)).thenReturn(true);
+        when(studentProfileRepository.findFetchedByUserId(3L)).thenReturn(Optional.of(studentProfile));
+
+        assertThrows(BadRequestException.class, () -> practiceGradeService.create(request, "teacher@test.ru"));
         verify(practiceGradeRepository, never()).save(any());
     }
 

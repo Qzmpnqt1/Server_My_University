@@ -1,5 +1,11 @@
+import org.gradle.api.tasks.testing.logging.TestExceptionFormat
+import org.gradle.api.tasks.testing.logging.TestLogEvent
+import org.gradle.testing.jacoco.plugins.JacocoTaskExtension
+import kotlin.math.max
+
 plugins {
     java
+    jacoco
     id("org.springframework.boot") version "3.3.4"
     id("io.spring.dependency-management") version "1.1.6"
 }
@@ -16,6 +22,21 @@ java {
 repositories {
     maven { url = uri("https://repo1.maven.org/maven2/") }
     maven { url = uri("https://repo.maven.apache.org/maven2/") }
+}
+
+sourceSets {
+    create("integrationTest") {
+        java.setSrcDirs(listOf("src/integrationTest/java"))
+        compileClasspath += sourceSets.main.get().output
+        runtimeClasspath += sourceSets.main.get().output
+    }
+}
+
+configurations.named("integrationTestImplementation") {
+    extendsFrom(configurations.testImplementation.get())
+}
+configurations.named("integrationTestRuntimeOnly") {
+    extendsFrom(configurations.testRuntimeOnly.get())
 }
 
 dependencies {
@@ -47,8 +68,113 @@ dependencies {
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")
 }
 
-tasks.withType<Test> {
+tasks.withType<Test>().configureEach {
     useJUnitPlatform()
+    testLogging {
+        events = setOf(TestLogEvent.FAILED, TestLogEvent.SKIPPED)
+        exceptionFormat = TestExceptionFormat.SHORT
+    }
+    configure<JacocoTaskExtension> {
+        isEnabled = true
+        destinationFile = layout.buildDirectory.file("jacoco/${this@configureEach.name}.exec").get().asFile
+    }
+}
+
+jacoco {
+    toolVersion = "0.8.12"
+}
+
+tasks.jacocoTestReport {
+    dependsOn(tasks.test)
+    classDirectories.setFrom(
+        files(sourceSets.main.get().output.classesDirs).asFileTree.matching {
+            exclude("**/dto/**", "**/model/**", "**/config/OpenApiConfig.class")
+        }
+    )
+    sourceDirectories.setFrom(files("src/main/java"))
+    executionData.setFrom(layout.buildDirectory.file("jacoco/test.exec").get().asFile)
+    reports {
+        xml.required.set(true)
+        html.required.set(true)
+    }
+}
+
+tasks.register<JacocoReport>("jacocoFullReport") {
+    group = "verification"
+    description = "JaCoCo по unit/WebMvc + integrationTest (после ./gradlew test integrationTest)"
+    dependsOn(tasks.test, tasks.named("integrationTest"))
+    classDirectories.setFrom(
+        files(sourceSets.main.get().output.classesDirs).asFileTree.matching {
+            exclude("**/dto/**", "**/model/**", "**/config/OpenApiConfig.class")
+        }
+    )
+    sourceDirectories.setFrom(files("src/main/java"))
+    executionData.setFrom(
+        layout.buildDirectory.file("jacoco/test.exec"),
+        layout.buildDirectory.file("jacoco/integrationTest.exec")
+    )
+    reports {
+        xml.required.set(true)
+        html.required.set(true)
+        html.outputLocation.set(layout.buildDirectory.dir("reports/jacoco/full/html"))
+    }
+}
+
+val cores = Runtime.getRuntime().availableProcessors()
+val unitForks = max(1, cores / 2)
+
+tasks.test {
+    maxParallelForks = unitForks
+    // Параллелизм — между форками Gradle. JUnit concurrent внутри форка ломает Mockito @MockBean в WebMvcTest.
+    useJUnitPlatform {
+        excludeTags("security")
+    }
+    finalizedBy(tasks.jacocoTestReport)
+}
+
+tasks.register<Test>("securityTest") {
+    description = "Негативные сценарии безопасности (@Tag(\"security\"))"
+    group = "verification"
+    testClassesDirs = sourceSets["test"].output.classesDirs
+    classpath = sourceSets["test"].runtimeClasspath
+    maxParallelForks = unitForks
+    useJUnitPlatform {
+        includeTags("security")
+    }
+}
+
+tasks.register<Test>("integrationTest") {
+    description = "Интеграционные тесты: Spring Boot + Flyway + Testcontainers (MySQL + Cassandra), один форк"
+    group = "verification"
+    testClassesDirs = sourceSets["integrationTest"].output.classesDirs
+    classpath = sourceSets["integrationTest"].runtimeClasspath
+    maxParallelForks = 1
+    systemProperty("junit.jupiter.execution.parallel.enabled", "false")
+    shouldRunAfter(tasks.test)
+}
+
+tasks.register<Test>("functionalApiTest") {
+    description = "Функциональные API-сценарии из integrationTest (@Tag(\"functional\"))"
+    group = "verification"
+    testClassesDirs = sourceSets["integrationTest"].output.classesDirs
+    classpath = sourceSets["integrationTest"].runtimeClasspath
+    maxParallelForks = 1
+    systemProperty("junit.jupiter.execution.parallel.enabled", "false")
+    useJUnitPlatform {
+        includeTags("functional")
+    }
+    shouldRunAfter(tasks.test)
+}
+
+tasks.register("regressionTest") {
+    group = "verification"
+    description = "Регрессия: unit/WebMvc + security + integration"
+    dependsOn(tasks.test, tasks.named("securityTest"), tasks.named("integrationTest"))
+}
+
+tasks.check {
+    // Быстрый локальный check: unit/WebMvc + негативная JWT-безопасность. IT — в CI или ./gradlew regressionTest
+    dependsOn(tasks.named("securityTest"))
 }
 
 tasks.withType<JavaCompile> {

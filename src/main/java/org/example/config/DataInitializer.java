@@ -21,7 +21,7 @@ import java.util.Comparator;
 
 @Component
 @RequiredArgsConstructor
-@Profile("!test")
+@Profile("!test & !integrationtest")
 public class DataInitializer implements CommandLineRunner {
 
     private static final Logger log = LoggerFactory.getLogger(DataInitializer.class);
