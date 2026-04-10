@@ -53,6 +53,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: jacoco-exec-unit
+          if-no-files-found: error
           path: |
             build/jacoco/test.exec
             build/jacoco/securityTest.exec
@@ -100,6 +101,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: jacoco-exec-integration
+          if-no-files-found: error
           path: build/jacoco/integrationTest.exec
 
   coverage-gate:
@@ -139,12 +141,38 @@ jobs:
           path: dl-jacoco-int
 
       - name: Merge exec into build/jacoco
+        shell: bash
         run: |
+          set -euo pipefail
           mkdir -p build/jacoco
-          # upload-artifact сохраняет относительные пути (build/jacoco/*.exec)
-          cp dl-jacoco-unit/build/jacoco/test.exec build/jacoco/test.exec
-          cp dl-jacoco-unit/build/jacoco/securityTest.exec build/jacoco/securityTest.exec
-          cp dl-jacoco-int/build/jacoco/integrationTest.exec build/jacoco/integrationTest.exec
+
+          echo "=== Files under dl-jacoco-unit (after download-artifact) ==="
+          find dl-jacoco-unit -type f 2>/dev/null | sort || true
+          echo "=== Files under dl-jacoco-int (after download-artifact) ==="
+          find dl-jacoco-int -type f 2>/dev/null | sort || true
+
+          # Структура каталогов после upload/download может отличаться (корень артефакта,
+          # вложенность build/jacoco/ и т.д.) — ищем по имени файла.
+          copy_one() {
+            local search_root="$1"
+            local want_name="$2"
+            local dest="build/jacoco/${want_name}"
+            local found
+            found="$(find "$search_root" -type f -name "$want_name" 2>/dev/null | head -n1 || true)"
+            if [[ -z "$found" || ! -f "$found" ]]; then
+              echo "::error::JaCoCo exec not found: ${want_name} under ${search_root}"
+              exit 1
+            fi
+            cp "$found" "$dest"
+            echo "OK: copied ${found} -> ${dest}"
+          }
+
+          copy_one dl-jacoco-unit test.exec
+          copy_one dl-jacoco-unit securityTest.exec
+          copy_one dl-jacoco-int integrationTest.exec
+
+          echo "=== build/jacoco after merge ==="
+          ls -la build/jacoco/
 
       - name: Verify coverage (security ≥75%, service.impl ≥55%, util ≥57%)
         run: ./gradlew jacocoKeyPackagesVerifyMergedCi --no-daemon
