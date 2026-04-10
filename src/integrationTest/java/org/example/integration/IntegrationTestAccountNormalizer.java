@@ -24,7 +24,8 @@ public class IntegrationTestAccountNormalizer {
         return args -> {
             for (String email : new String[]{
                     "superadmin@moyvuz.local",
-                    "admin@university.ru"
+                    "admin@university.ru",
+                    "teacher.itest@moyvuz.local",
             }) {
                 usersRepository.findByEmail(email).ifPresent(u -> {
                     if (!passwordEncoder.matches(KNOWN_IT_PASSWORD, u.getPasswordHash())) {

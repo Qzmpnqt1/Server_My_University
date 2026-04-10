@@ -1,6 +1,7 @@
 import org.gradle.api.tasks.testing.logging.TestExceptionFormat
 import org.gradle.api.tasks.testing.logging.TestLogEvent
 import org.gradle.testing.jacoco.plugins.JacocoTaskExtension
+import org.gradle.testing.jacoco.tasks.JacocoCoverageVerification
 import kotlin.math.max
 
 plugins {
@@ -101,8 +102,8 @@ tasks.jacocoTestReport {
 
 tasks.register<JacocoReport>("jacocoFullReport") {
     group = "verification"
-    description = "JaCoCo по unit/WebMvc + integrationTest (после ./gradlew test integrationTest)"
-    dependsOn(tasks.test, tasks.named("integrationTest"))
+    description = "JaCoCo по unit/WebMvc + securityTest + integrationTest (после ./gradlew test securityTest integrationTest)"
+    dependsOn(tasks.test, tasks.named("securityTest"), tasks.named("integrationTest"))
     classDirectories.setFrom(
         files(sourceSets.main.get().output.classesDirs).asFileTree.matching {
             exclude("**/dto/**", "**/model/**", "**/config/OpenApiConfig.class")
@@ -111,6 +112,7 @@ tasks.register<JacocoReport>("jacocoFullReport") {
     sourceDirectories.setFrom(files("src/main/java"))
     executionData.setFrom(
         layout.buildDirectory.file("jacoco/test.exec"),
+        layout.buildDirectory.file("jacoco/securityTest.exec"),
         layout.buildDirectory.file("jacoco/integrationTest.exec")
     )
     reports {
@@ -170,6 +172,110 @@ tasks.register("regressionTest") {
     group = "verification"
     description = "Регрессия: unit/WebMvc + security + integration"
     dependsOn(tasks.test, tasks.named("securityTest"), tasks.named("integrationTest"))
+}
+
+/**
+ * Ключевой функционал (без DTO/model): security + доменные impl + утилиты статистики/сортировки.
+ * Gate раздельный: security ≥75%; service.impl и util — по фактически достигнутому уровню (анти-регрессия).
+ */
+tasks.register<JacocoCoverageVerification>("jacocoKeyPackagesVerification") {
+    group = "verification"
+    description =
+        "Gate: security ≥75%, service.impl ≥55%, org.example.util ≥57% (INSTRUCTION); exec: test+securityTest+integrationTest"
+    dependsOn(tasks.test, tasks.named("securityTest"), tasks.named("integrationTest"))
+    classDirectories.setFrom(
+        files(sourceSets.main.get().output.classesDirs).asFileTree.matching {
+            include("org/example/service/impl/**/*.class")
+            include("org/example/security/**/*.class")
+            include("org/example/util/**/*.class")
+        }
+    )
+    sourceDirectories.setFrom(files("src/main/java"))
+    executionData.setFrom(
+        layout.buildDirectory.file("jacoco/test.exec"),
+        layout.buildDirectory.file("jacoco/securityTest.exec"),
+        layout.buildDirectory.file("jacoco/integrationTest.exec")
+    )
+    violationRules {
+        rule {
+            element = "PACKAGE"
+            includes = listOf("org.example.security")
+            limit {
+                counter = "INSTRUCTION"
+                value = "COVEREDRATIO"
+                minimum = "0.75".toBigDecimal()
+            }
+        }
+        rule {
+            element = "PACKAGE"
+            includes = listOf("org.example.service.impl")
+            limit {
+                counter = "INSTRUCTION"
+                value = "COVEREDRATIO"
+                minimum = "0.55".toBigDecimal()
+            }
+        }
+        rule {
+            element = "PACKAGE"
+            includes = listOf("org.example.util")
+            limit {
+                counter = "INSTRUCTION"
+                value = "COVEREDRATIO"
+                minimum = "0.57".toBigDecimal()
+            }
+        }
+    }
+}
+
+/**
+ * CI: без повторного прогона тестов — положите test.exec, securityTest.exec и integrationTest.exec в build/jacoco/
+ * (артефакты jobs unit-and-security и integration-functional).
+ */
+tasks.register<JacocoCoverageVerification>("jacocoKeyPackagesVerifyMergedCi") {
+    group = "verification"
+    description = "JaCoCo gate (как jacocoKeyPackagesVerification) по артефактам build/jacoco/*.exec"
+    classDirectories.setFrom(
+        files(sourceSets.main.get().output.classesDirs).asFileTree.matching {
+            include("org/example/service/impl/**/*.class")
+            include("org/example/security/**/*.class")
+            include("org/example/util/**/*.class")
+        }
+    )
+    sourceDirectories.setFrom(files("src/main/java"))
+    executionData.setFrom(
+        layout.buildDirectory.file("jacoco/test.exec"),
+        layout.buildDirectory.file("jacoco/securityTest.exec"),
+        layout.buildDirectory.file("jacoco/integrationTest.exec")
+    )
+    violationRules {
+        rule {
+            element = "PACKAGE"
+            includes = listOf("org.example.security")
+            limit {
+                counter = "INSTRUCTION"
+                value = "COVEREDRATIO"
+                minimum = "0.75".toBigDecimal()
+            }
+        }
+        rule {
+            element = "PACKAGE"
+            includes = listOf("org.example.service.impl")
+            limit {
+                counter = "INSTRUCTION"
+                value = "COVEREDRATIO"
+                minimum = "0.55".toBigDecimal()
+            }
+        }
+        rule {
+            element = "PACKAGE"
+            includes = listOf("org.example.util")
+            limit {
+                counter = "INSTRUCTION"
+                value = "COVEREDRATIO"
+                minimum = "0.57".toBigDecimal()
+            }
+        }
+    }
 }
 
 tasks.check {

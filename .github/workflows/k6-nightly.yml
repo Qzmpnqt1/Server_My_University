@@ -1,0 +1,34 @@
+# Лёгкий k6 smoke по расписанию: нужен доступный BASE_URL (секрет). Без секрета job пропускается.
+name: k6 smoke scheduled
+
+on:
+  schedule:
+    - cron: "15 4 * * 1"
+  workflow_dispatch:
+    inputs:
+      base_url:
+        description: "Корень API (https://...)"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  k6:
+    if: github.event_name == 'workflow_dispatch' || (vars.K6_BASE_URL != null && vars.K6_BASE_URL != '')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run k6 smoke
+        env:
+          BASE_URL: ${{ github.event.inputs.base_url || vars.K6_BASE_URL }}
+          K6_SKIP_TLS_VERIFY: ${{ vars.K6_SKIP_TLS_VERIFY || 'false' }}
+        run: |
+          docker run --rm \
+            -v "$GITHUB_WORKSPACE/load/k6:/scripts" \
+            -w /scripts \
+            -e BASE_URL \
+            -e K6_SKIP_TLS_VERIFY \
+            grafana/k6:latest run smoke.js

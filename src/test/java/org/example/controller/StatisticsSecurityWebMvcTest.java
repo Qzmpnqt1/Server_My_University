@@ -1,11 +1,10 @@
 package org.example.controller;
 
-import io.jsonwebtoken.ExpiredJwtException;
 import io.jsonwebtoken.JwtException;
 import org.example.config.SecurityConfig;
 import org.example.exception.GlobalExceptionHandler;
 import org.example.service.JwtService;
-import org.example.service.UserProfileService;
+import org.example.service.StatisticsService;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
@@ -14,6 +13,7 @@ import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.context.annotation.Import;
 import org.springframework.security.core.userdetails.UserDetailsService;
+import org.springframework.security.test.context.support.WithMockUser;
 import org.springframework.test.web.servlet.MockMvc;
 
 import static org.mockito.ArgumentMatchers.anyString;
@@ -21,19 +21,16 @@ import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-/**
- * Негативные сценарии JWT (фильтр до контроллера).
- */
 @Tag("security")
-@WebMvcTest(controllers = ProfileController.class)
+@WebMvcTest(controllers = StatisticsController.class)
 @Import({SecurityConfig.class, GlobalExceptionHandler.class})
-class JwtSecurityWebMvcTest {
+class StatisticsSecurityWebMvcTest {
 
     @Autowired
     private MockMvc mockMvc;
 
     @MockBean
-    private UserProfileService userProfileService;
+    private StatisticsService statisticsService;
 
     @MockBean
     private JwtService jwtService;
@@ -42,19 +39,9 @@ class JwtSecurityWebMvcTest {
     private UserDetailsService userDetailsService;
 
     @Test
-    @DisplayName("Невалидный JWT — 401")
-    void invalidJwt_returns401() throws Exception {
-        when(jwtService.extractUsername(anyString())).thenThrow(new JwtException("invalid"));
-
-        mockMvc.perform(get("/api/v1/profile/me")
-                        .header("Authorization", "Bearer not-a-real-jwt"))
-                .andExpect(status().isUnauthorized());
-    }
-
-    @Test
-    @DisplayName("GET /profile/me без Authorization — 401/403")
-    void noToken_rejected() throws Exception {
-        mockMvc.perform(get("/api/v1/profile/me"))
+    @DisplayName("GET /statistics/me/student без токена — 401/403")
+    void studentSummary_anonymous_rejected() throws Exception {
+        mockMvc.perform(get("/api/v1/statistics/me/student"))
                 .andExpect(result -> {
                     int sc = result.getResponse().getStatus();
                     if (sc != 401 && sc != 403) {
@@ -64,13 +51,19 @@ class JwtSecurityWebMvcTest {
     }
 
     @Test
-    @DisplayName("Просроченный JWT — 401")
-    void expiredJwt_returns401() throws Exception {
-        when(jwtService.extractUsername(anyString())).thenThrow(
-                new ExpiredJwtException(null, null, "expired"));
-
-        mockMvc.perform(get("/api/v1/profile/me")
-                        .header("Authorization", "Bearer expired.token.here"))
+    @DisplayName("Невалидный JWT на /statistics/me/student — 401")
+    void studentSummary_invalidJwt_rejected() throws Exception {
+        when(jwtService.extractUsername(anyString())).thenThrow(new JwtException("invalid"));
+        mockMvc.perform(get("/api/v1/statistics/me/student")
+                        .header("Authorization", "Bearer not-a-jwt"))
                 .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    @DisplayName("STUDENT не может GET /statistics/subject/{id} (агрегаты преподавателя)")
+    @WithMockUser(roles = "STUDENT")
+    void studentCannotReadSubjectStatistics() throws Exception {
+        mockMvc.perform(get("/api/v1/statistics/subject/1"))
+                .andExpect(status().isForbidden());
     }
 }

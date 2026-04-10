@@ -17,7 +17,12 @@
 | Workflow            | Файл                     | Назначение                          |
 |---------------------|--------------------------|-------------------------------------|
 | Backend CI          | `.github/workflows/backend-ci.yml`  | Сборка, тесты, `bootJar`, артефакты |
+| Backend regression (nightly) | `.github/workflows/backend-regression-nightly.yml` | `./gradlew regressionTest`, `jacocoFullReport` |
+| k6 smoke (manual)   | `.github/workflows/k6-smoke.yml`    | Docker k6 по `load/k6/smoke.js` |
+| k6 scheduled        | `.github/workflows/k6-nightly.yml`  | Опционально: variable `K6_BASE_URL` или ручной ввод URL |
 | Backend CD          | `.github/workflows/backend-cd.yml`  | Сборка Docker, push в **GHCR**, опциональный SSH deploy |
+
+Подробнее о тестах и JaCoCo: [TESTING_AND_COVERAGE.md](TESTING_AND_COVERAGE.md).
 
 ---
 

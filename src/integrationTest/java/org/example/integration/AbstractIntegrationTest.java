@@ -20,7 +20,7 @@ import org.testcontainers.junit.jupiter.Testcontainers;
  */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 @ActiveProfiles("integrationtest")
-@Import(IntegrationTestAccountNormalizer.class)
+@Import({IntegrationTestAccountNormalizer.class, IntegrationTestTeacherAndPracticeSeed.class})
 @Testcontainers
 @Execution(ExecutionMode.SAME_THREAD)
 public abstract class AbstractIntegrationTest {

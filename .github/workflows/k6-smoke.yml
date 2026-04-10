@@ -1,0 +1,40 @@
+# Нагрузочный smoke вне PR: нужен доступный BASE_URL (стенд / VPN). В PR не запускается.
+name: k6 performance smoke
+
+on:
+  workflow_dispatch:
+    inputs:
+      base_url:
+        description: "Корень API (например https://api.example.com)"
+        required: true
+        type: string
+      skip_tls_verify:
+        description: "K6_SKIP_TLS_VERIFY для самоподписанного TLS"
+        required: false
+        default: "false"
+        type: choice
+        options:
+          - "true"
+          - "false"
+
+permissions:
+  contents: read
+
+jobs:
+  k6-smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Run k6 smoke
+        env:
+          BASE_URL: ${{ inputs.base_url }}
+          K6_SKIP_TLS_VERIFY: ${{ inputs.skip_tls_verify }}
+        run: |
+          docker run --rm \
+            -v "$GITHUB_WORKSPACE/load/k6:/scripts" \
+            -w /scripts \
+            -e BASE_URL \
+            -e K6_SKIP_TLS_VERIFY \
+            grafana/k6:latest run smoke.js

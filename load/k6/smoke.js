@@ -1,7 +1,9 @@
 /**
- * Быстрый performance-smoke: мало VU, короткая длительность.
+ * Быстрый performance-smoke: мало VU, мягкие пороги (CI / sanity).
  * Запуск: k6 run -e BASE_URL=https://localhost:8443 -e EMAIL=... -e PASSWORD=... smoke.js
  * (для самоподписанного TLS: K6_SKIP_TLS_VERIFY=true)
+ *
+ * Жёсткие пороги ТЗ (p95 200 ms, много VU) — см. tz-stress-profile.js на выделенном стенде.
  */
 import http from "k6/http";
 import { check, sleep } from "k6";

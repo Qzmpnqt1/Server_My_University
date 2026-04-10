@@ -3,6 +3,7 @@ package org.example.integration;
 import com.fasterxml.jackson.databind.JsonNode;
 import org.example.dto.response.AuthResponse;
 import org.example.dto.response.MessageResponse;
+import org.example.dto.response.UserProfileResponse;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.MethodOrderer;
 import org.junit.jupiter.api.Order;
@@ -27,13 +28,13 @@ import static org.assertj.core.api.Assertions.assertThat;
  * без закрытия DataSource между классами (устраняет «мертвые» коннекты к MySQL в Testcontainers).
  */
 @Tag("integration")
-@Tag("functional")
-@Tag("regression")
 @TestMethodOrder(MethodOrderer.OrderAnnotation.class)
 class CombinedIntegrationIT extends AbstractIntegrationTest {
 
     private static String pendingStudentEmail;
     private static String pendingStudentPassword;
+    private static String studentAccessToken;
+    private static long registeredStudentUserId;
 
     @Test
     @Order(1)
@@ -65,6 +66,7 @@ class CombinedIntegrationIT extends AbstractIntegrationTest {
     }
 
     @Test
+    @Tag("functional")
     @Order(4)
     @DisplayName("Гость подаёт заявку, админ одобряет, студент логинится")
     void guestRegisters_adminApproves_studentLogsIn() throws Exception {
@@ -119,12 +121,250 @@ class CombinedIntegrationIT extends AbstractIntegrationTest {
 
         AuthResponse studentAuth = login(pendingStudentEmail, pendingStudentPassword);
         assertThat(studentAuth.getToken()).isNotBlank();
+        studentAccessToken = studentAuth.getToken();
         assertThat(studentAuth.getEmail()).isEqualTo(pendingStudentEmail);
         assertThat(studentAuth.getUserType().name()).isEqualTo("STUDENT");
     }
 
     @Test
+    @Tag("functional")
     @Order(5)
+    @DisplayName("Студент читает свой профиль GET /api/v1/profile/me")
+    void studentGetsOwnProfile() throws Exception {
+        ResponseEntity<String> r = restTemplate.exchange(
+                "/api/v1/profile/me",
+                HttpMethod.GET,
+                new HttpEntity<>(jsonHeadersBearer(studentAccessToken)),
+                String.class);
+        assertThat(r.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(r.getBody()).isNotBlank();
+        assertThat(r.getBody()).contains(pendingStudentEmail);
+        UserProfileResponse me = objectMapper.readValue(r.getBody(), UserProfileResponse.class);
+        registeredStudentUserId = me.getId();
+        assertThat(registeredStudentUserId).isPositive();
+    }
+
+    @Test
+    @Tag("functional")
+    @Order(6)
+    @DisplayName("Студент получает расписание группы GET /api/v1/schedule/group/1")
+    void studentGetsGroupSchedule() {
+        ResponseEntity<String> r = restTemplate.exchange(
+                "/api/v1/schedule/group/1",
+                HttpMethod.GET,
+                new HttpEntity<>(jsonHeadersBearer(studentAccessToken)),
+                String.class);
+        assertThat(r.getStatusCode()).isEqualTo(HttpStatus.OK);
+    }
+
+    @Test
+    @Tag("functional")
+    @Order(7)
+    @DisplayName("Студент получает зачётку GET /api/v1/grades/my")
+    void studentGetsGradebook() {
+        ResponseEntity<String> r = restTemplate.exchange(
+                "/api/v1/grades/my",
+                HttpMethod.GET,
+                new HttpEntity<>(jsonHeadersBearer(studentAccessToken)),
+                String.class);
+        assertThat(r.getStatusCode()).isEqualTo(HttpStatus.OK);
+    }
+
+    @Test
+    @Tag("functional")
+    @Order(8)
+    @DisplayName("Студент получает сводку успеваемости GET /api/v1/statistics/me/student")
+    void studentGetsStatisticsSummary() {
+        ResponseEntity<String> r = restTemplate.exchange(
+                "/api/v1/statistics/me/student",
+                HttpMethod.GET,
+                new HttpEntity<>(jsonHeadersBearer(studentAccessToken)),
+                String.class);
+        assertThat(r.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(r.getBody()).isNotBlank();
+    }
+
+    @Test
+    @Tag("functional")
+    @Order(9)
+    @DisplayName("Студент читает уведомления и unread-count")
+    void studentNotificationsFlow() {
+        ResponseEntity<String> list = restTemplate.exchange(
+                "/api/v1/notifications/my",
+                HttpMethod.GET,
+                new HttpEntity<>(jsonHeadersBearer(studentAccessToken)),
+                String.class);
+        assertThat(list.getStatusCode()).isEqualTo(HttpStatus.OK);
+
+        ResponseEntity<String> cnt = restTemplate.exchange(
+                "/api/v1/notifications/unread-count",
+                HttpMethod.GET,
+                new HttpEntity<>(jsonHeadersBearer(studentAccessToken)),
+                String.class);
+        assertThat(cnt.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(cnt.getBody()).contains("unreadCount");
+    }
+
+    @Test
+    @Tag("functional")
+    @Order(10)
+    @DisplayName("Преподаватель выставляет итоговую оценку; студент видит её в зачётке")
+    void teacherSetsFinalGrade_studentSeesInGradebook() throws Exception {
+        AuthResponse teacherAuth = login("teacher.itest@moyvuz.local", "Admin123!");
+        HttpHeaders teacherH = jsonHeadersBearer(teacherAuth.getToken());
+
+        String gradeBody = """
+                {
+                  "studentId": %d,
+                  "subjectDirectionId": 1,
+                  "grade": 5,
+                  "groupId": 1
+                }
+                """.formatted(registeredStudentUserId);
+
+        ResponseEntity<String> created = restTemplate.exchange(
+                "/api/v1/grades",
+                HttpMethod.POST,
+                new HttpEntity<>(gradeBody, teacherH),
+                String.class);
+        assertThat(created.getStatusCode()).isEqualTo(HttpStatus.CREATED);
+
+        ResponseEntity<String> mine = restTemplate.exchange(
+                "/api/v1/grades/my",
+                HttpMethod.GET,
+                new HttpEntity<>(jsonHeadersBearer(studentAccessToken)),
+                String.class);
+        assertThat(mine.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(mine.getBody()).contains("\"grade\":5");
+        assertThat(mine.getBody()).contains("Базы данных");
+    }
+
+    @Test
+    @Tag("functional")
+    @Order(11)
+    @DisplayName("Преподаватель выставляет оценку за практику; студент видит практику")
+    void teacherSetsPracticeGrade_studentSeesIt() throws Exception {
+        ResponseEntity<String> practices = restTemplate.exchange(
+                "/api/v1/subject-practices?subjectDirectionId=1",
+                HttpMethod.GET,
+                new HttpEntity<>(jsonHeadersBearer(studentAccessToken)),
+                String.class);
+        assertThat(practices.getStatusCode()).isEqualTo(HttpStatus.OK);
+        JsonNode parr = objectMapper.readTree(practices.getBody());
+        long practiceId = -1;
+        for (JsonNode n : parr) {
+            if ("ITest практика".equals(n.path("practiceTitle").asText())
+                    || n.path("practiceTitle").asText().contains("ITest")) {
+                practiceId = n.path("id").asLong();
+                break;
+            }
+        }
+        assertThat(practiceId).isPositive();
+
+        AuthResponse teacherAuth = login("teacher.itest@moyvuz.local", "Admin123!");
+        HttpHeaders teacherH = jsonHeadersBearer(teacherAuth.getToken());
+        String body = """
+                {
+                  "studentId": %d,
+                  "practiceId": %d,
+                  "grade": 4,
+                  "groupId": 1
+                }
+                """.formatted(registeredStudentUserId, practiceId);
+
+        ResponseEntity<String> pg = restTemplate.exchange(
+                "/api/v1/practice-grades",
+                HttpMethod.POST,
+                new HttpEntity<>(body, teacherH),
+                String.class);
+        assertThat(pg.getStatusCode()).isEqualTo(HttpStatus.CREATED);
+
+        ResponseEntity<String> slots = restTemplate.exchange(
+                "/api/v1/practice-grades/my/subject/1/slots",
+                HttpMethod.GET,
+                new HttpEntity<>(jsonHeadersBearer(studentAccessToken)),
+                String.class);
+        assertThat(slots.getStatusCode()).isEqualTo(HttpStatus.OK);
+        JsonNode slotArr = objectMapper.readTree(slots.getBody());
+        boolean foundSlot = false;
+        for (JsonNode s : slotArr) {
+            if (practiceId == s.path("practiceId").asLong()
+                    && s.path("grade").asInt() == 4
+                    && s.path("hasResult").asBoolean()) {
+                foundSlot = true;
+                break;
+            }
+        }
+        assertThat(foundSlot).as("студент видит оценку 4 за практику в слотах зачётки").isTrue();
+    }
+
+    @Test
+    @Tag("functional")
+    @Order(12)
+    @DisplayName("После оценок сводка успеваемости отражает результаты")
+    void studentStatisticsReflectsGrades() {
+        ResponseEntity<String> r = restTemplate.exchange(
+                "/api/v1/statistics/me/student",
+                HttpMethod.GET,
+                new HttpEntity<>(jsonHeadersBearer(studentAccessToken)),
+                String.class);
+        assertThat(r.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(r.getBody()).contains("subjectsWithFinalResult");
+        assertThat(r.getBody()).contains("practicesWithResult");
+    }
+
+    @Test
+    @Tag("functional")
+    @Order(13)
+    @DisplayName("Студент не читает чужой диалог по произвольному UUID")
+    void studentCannotReadForeignConversation() {
+        ResponseEntity<Void> r = restTemplate.exchange(
+                "/api/v1/chats/00000000-0000-0000-0000-000000000001/messages?limit=5",
+                HttpMethod.GET,
+                new HttpEntity<>(jsonHeadersBearer(studentAccessToken)),
+                Void.class);
+        assertThat(r.getStatusCode().is4xxClientError()).isTrue();
+    }
+
+    @Test
+    @Tag("functional")
+    @Order(14)
+    @DisplayName("Студент не может смотреть зачётку другого через teacher endpoint")
+    void studentCannotUseTeacherGradeEndpoint() {
+        ResponseEntity<Void> r = restTemplate.exchange(
+                "/api/v1/grades/by-student/" + registeredStudentUserId,
+                HttpMethod.GET,
+                new HttpEntity<>(jsonHeadersBearer(studentAccessToken)),
+                Void.class);
+        assertThat(r.getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN);
+    }
+
+    @Test
+    @Tag("functional")
+    @Order(15)
+    @DisplayName("SUPER_ADMIN: список вузов и доступ к заявкам (область видимости)")
+    void superAdminListsUniversitiesAndRegistrationRequests() throws Exception {
+        AuthResponse superAuth = login("superadmin@moyvuz.local", "Admin123!");
+        HttpHeaders h = jsonHeadersBearer(superAuth.getToken());
+        ResponseEntity<String> unis = restTemplate.exchange(
+                "/api/v1/universities",
+                HttpMethod.GET,
+                new HttpEntity<>(h),
+                String.class);
+        assertThat(unis.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(unis.getBody()).contains("Московский");
+
+        ResponseEntity<String> req = restTemplate.exchange(
+                "/api/v1/registration-requests?status=PENDING",
+                HttpMethod.GET,
+                new HttpEntity<>(h),
+                String.class);
+        assertThat(req.getStatusCode()).isEqualTo(HttpStatus.OK);
+    }
+
+    @Test
+    @Tag("functional")
+    @Order(16)
     @DisplayName("SUPER_ADMIN отправляет сообщение админу; история читается из Cassandra")
     void sendMessage_andReadHistory() throws Exception {
         AuthResponse superAuth = login("superadmin@moyvuz.local", "Admin123!");
